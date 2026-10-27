@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dock band: lapis-800 @55% with a gold-400 @18% hairline, so it reads on every sky. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#8C12264A" />
+    <stroke android:width="0.5dp" android:color="#2ED8B46A" />
+    <corners android:radius="14dp" />
+</shape>

@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Every personal choice lives in this one file.
+  Edit it, then run tools/build-install.sh. Nothing else in the launcher needs to change.
+
+  The values shipped here are the example used for the screenshots in docs/screenshots:
+  prayer times for Hyderabad, India, and a second clock for Kitchener, Canada.
+-->
+<resources>
+
+    <!-- ============================================================ prayer times -->
+
+    <!-- true: the prayer timeline (next-prayer countdown), the Hijri date and a sky that follows the
+         prayer times. false: no timeline or Hijri date; the sky still follows the sun (dawn, sunrise,
+         noon, afternoon, sunset, night) for the location below, and OK on the clock opens Display
+         settings (clock font, text size). Either way set the location: it also drives the weather. -->
+    <bool name="prayer_enabled">true</bool>
+
+    <!-- Your city. Shown in the title of the on-TV Prayer settings panel ("Prayer settings · Shah Alam"). -->
+    <string name="prayer_city_label" translatable="false">Shah Alam</string>
+
+    <!-- Decimal degrees, north and east positive (south and west negative). Four decimals is plenty. -->
+    <string name="prayer_lat" translatable="false">3.0738</string>
+    <string name="prayer_lng" translatable="false">101.5183</string>
+
+    <!-- Default calculation method. One of:
+           KARACHI                  University of Islamic Sciences, Karachi (India, Pakistan, Bangladesh)
+           MUSLIM_WORLD_LEAGUE      Muslim World League (Europe, much of the world)
+           UMM_AL_QURA              Umm al-Qura, Makkah (Saudi Arabia)
+           EGYPTIAN                 Egyptian General Authority of Survey (Egypt, parts of Africa)
+           NORTH_AMERICA            ISNA (USA, Canada)
+           DUBAI                    UAE
+           KUWAIT                   Kuwait
+           QATAR                    Qatar
+           SINGAPORE                Singapore, Malaysia, Indonesia
+           MOON_SIGHTING_COMMITTEE  Moonsighting Committee Worldwide (UK and others)
+         The Prayer settings panel on the TV can change it later; this is only the starting value. -->
+    <string name="prayer_method" translatable="false">SINGAPORE</string>
+
+    <!-- Default Asr school: HANAFI (later Asr) or SHAFI (Shafi'i, Maliki, Hanbali). Changeable on the TV. -->
+    <string name="prayer_madhab" translatable="false">SHAFI</string>
+
+    <!-- ============================================================ second clock -->
+
+    <!-- A small clock top right for a second city (family abroad, work). false hides it and its weather. -->
+    <bool name="second_clock_enabled">true</bool>
+
+    <!-- Only used for logs and accessibility; the screen shows the flag, not the name. -->
+    <string name="second_city_label" translatable="false">Makkah</string>
+
+    <!-- IANA time zone id, e.g. America/Toronto, Europe/London, America/New_York, Asia/Dubai,
+         Asia/Riyadh, Asia/Karachi, Asia/Kolkata. Daylight saving is handled automatically. -->
+    <string name="second_zone" translatable="false">Asia/Riyadh</string>
+
+    <!-- Drawable name of the flag in res/drawable. Shipped: flag_ca, flag_in, flag_gb, flag_us,
+         flag_ae, flag_sa, flag_pk. For another country add res/drawable/flag_xx.xml (a 3:2 vector,
+         see flag_pk.xml for the shape) and put its name here. An unknown name just hides the flag. -->
+    <string name="second_flag" translatable="false">flag_sa</string>
+
+    <!-- The second city's coordinates, for its weather only. -->
+    <string name="second_lat" translatable="false">21.4225</string>
+    <string name="second_lng" translatable="false">39.8262</string>
+
+    <!-- ============================================================ weather -->
+
+    <!-- Current temperature, icon and today's high/low from Open-Meteo (free, no key, no account).
+         It is fetched only while the home screen is in front, at most every 30 minutes, and hidden
+         when older than 3 hours. false turns the launcher's only network use off completely. -->
+    <bool name="weather_enabled">true</bool>
+
+    <!-- celsius or fahrenheit (passed to Open-Meteo as temperature_unit). -->
+    <string name="weather_units" translatable="false">celsius</string>
+
+    <!-- ============================================================ apps -->
+
+    <!-- Dock apps, left to right. Packages that are not installed are skipped.
+         Find package names with: adb shell pm list packages | grep -i netflix -->
+    <string-array name="dock_packages" translatable="false">
+        <item>com.google.android.youtube.tv</item>
+        <item>com.netflix.ninja</item>
+        <item>com.nuvio.tv</item>
+        <item>org.xbmc.kodi</item>
+        <item>com.sportzx.live</item>
+        <item>com.beinsports.connect.tv.apac</item>
+        <item>studio.scillarium.ottnavigator</item>
+    </string-array>
+
+    <!-- Never shown in the app grid. List the dock apps again so the grid stays clean if one is
+         later dropped from the dock. The launcher itself is always hidden.
+         Packages that are not installed are ignored, so leftovers are harmless. -->
+    <string-array name="hidden_packages" translatable="false">
+        <!-- Sony BRAVIA: re-enabled by the firmware at every boot, so hidden instead of disabled. -->
+        <item>com.sony.dtv.ecodashboard</item>
+        <item>com.sony.dtv.ipcontrol</item>
+        <!-- Alternative launcher kept installed: -->
+        <item>com.gathin.tvhome</item>
+        <item>com.google.android.youtube.tv</item>
+        <item>com.netflix.ninja</item>
+        <item>com.nuvio.tv</item>
+        <item>org.xbmc.kodi</item>
+        <item>com.sportzx.live</item>
+        <item>com.beinsports.connect.tv.apac</item>
+        <item>studio.scillarium.ottnavigator</item>
+    </string-array>
+
+    <!-- ============================================================ look -->
+
+    <!-- Wallpaper geometry: zellige (the same pattern every day) or rotate (8-point star, hex girih,
+         interlaced circles and zellige, one per day). -->
+    <string name="pattern_mode" translatable="false">rotate</string>
+
+    <!-- Thought of the day between the timeline and the dock (content/thoughts.json). -->
+    <bool name="thoughts_enabled">true</bool>
+
+    <!-- Starting values for two rows of the on-TV Prayer settings panel; the panel can change them.
+         clock_font: cormorant (elegant serif, default) or outfit (thin geometric sans).
+         text_size: normal, large or larger (scales everything except the big clock and the dock). -->
+    <string name="clock_font" translatable="false">cormorant</string>
+    <string name="text_size" translatable="false">normal</string>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Launcher" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/lapis_900</item>
+        <item name="android:colorBackground">@color/lapis_900</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <!-- Round icon button (56px at 1080p); the focused one is gold with a lapis icon (MainActivity.setLook). -->
+    <style name="RoundButton">
+        <item name="android:layout_width">28dp</item>
+        <item name="android:layout_height">28dp</item>
+        <item name="android:layout_marginStart">10dp</item>
+        <item name="android:background">@drawable/bg_btn</item>
+        <item name="android:padding">6dp</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:tint">@color/plaster_100</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+</resources>

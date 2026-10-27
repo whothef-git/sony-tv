@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WidgeTV</string>
+    <string name="inputs">Inputs</string>
+    <string name="wifi">Wi-Fi</string>
+    <string name="ethernet">Ethernet</string>
+    <string name="offline">Offline</string>
+    <string name="settings">Settings</string>
+    <string name="apps">Apps</string>
+    <string name="live_tv">Live TV</string>
+    <string name="tv_inputs">TV inputs</string>
+    <string name="prayer_settings">Prayer settings</string>
+    <string name="display_settings">Display settings</string>
+</resources>

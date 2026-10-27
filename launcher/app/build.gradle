@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'tv.widgetv.home'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'tv.widgetv.home'
+        minSdk 28
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildFeatures {
+        buildConfig true // BuildConfig.DEBUG guards the adb preview hooks
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.palette:palette:1.0.0'
+    // Offline prayer-time calculation (MIT, no transitive dependencies); same version as Afnon.
+    implementation 'com.batoulapps.adhan:adhan:1.2.1'
+}

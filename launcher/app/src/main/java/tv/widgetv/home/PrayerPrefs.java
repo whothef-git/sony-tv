@@ -1,0 +1,108 @@
+package tv.widgetv.home;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import com.batoulapps.adhan.CalculationMethod;
+import com.batoulapps.adhan.Coordinates;
+import com.batoulapps.adhan.Madhab;
+
+/**
+ * Prayer settings chosen on the TV (SharedPreferences "prayer"). Every value starts from
+ * res/values/config.xml (see Config) until it is changed in the Prayer settings panel.
+ * Adapted from Afnon's Prefs.java (MIT, https://github.com/egyjs/afnon-android-tv-launcher): the
+ * method/madhab preferences and the per-prayer offsets ("offset_<prayer>" keys, clamped to -30..+30).
+ */
+final class PrayerPrefs {
+    /** Every method adhan-java 1.2.1 offers except OTHER, in the order the panel cycles through them. */
+    static final CalculationMethod[] METHODS = {
+            CalculationMethod.KARACHI, CalculationMethod.MUSLIM_WORLD_LEAGUE, CalculationMethod.UMM_AL_QURA,
+            CalculationMethod.EGYPTIAN, CalculationMethod.NORTH_AMERICA, CalculationMethod.DUBAI,
+            CalculationMethod.KUWAIT, CalculationMethod.QATAR, CalculationMethod.SINGAPORE,
+            CalculationMethod.MOON_SIGHTING_COMMITTEE};
+    static final String[] METHOD_NAMES = {
+            "Karachi", "Muslim World League", "Umm al-Qura", "Egyptian", "North America (ISNA)", "Dubai",
+            "Kuwait", "Qatar", "Singapore", "Moonsighting Committee"};
+
+    /** The five prayers that take a minute offset, indexed like PrayerDay.times. */
+    static final int[] OFFSET_PRAYERS = {PrayerDay.FAJR, PrayerDay.DHUHR, PrayerDay.ASR, PrayerDay.MAGHRIB, PrayerDay.ISHA};
+
+    private PrayerPrefs() {
+    }
+
+    static SharedPreferences of(Context c) {
+        return c.getSharedPreferences("prayer", Context.MODE_PRIVATE);
+    }
+
+    static Coordinates where(Context c) {
+        Config cfg = Config.get(c);
+        return new Coordinates(cfg.lat, cfg.lng);
+    }
+
+    static int methodIndex(Context c) {
+        String name = of(c).getString("method", Config.get(c).method.name());
+        for (int i = 0; i < METHODS.length; i++) if (METHODS[i].name().equals(name)) return i;
+        return 0;
+    }
+
+    static void setMethodIndex(Context c, int i) {
+        of(c).edit().putString("method", METHODS[i].name()).apply();
+    }
+
+    static boolean hanafi(Context c) {
+        String fallback = Config.get(c).madhab == Madhab.HANAFI ? "hanafi" : "shafi";
+        return "hanafi".equals(of(c).getString("madhab", fallback));
+    }
+
+    static void setHanafi(Context c, boolean hanafi) {
+        of(c).edit().putString("madhab", hanafi ? "hanafi" : "shafi").apply();
+    }
+
+    static int offset(Context c, int prayer) {
+        return of(c).getInt("offset_" + prayer, 0);
+    }
+
+    static void setOffset(Context c, int prayer, int minutes) {
+        of(c).edit().putInt("offset_" + prayer, Math.max(-30, Math.min(30, minutes))).apply();
+    }
+
+    static int[] offsets(Context c) {
+        int[] out = new int[6];
+        for (int p : OFFSET_PRAYERS) out[p] = offset(c, p);
+        return out;
+    }
+
+    /** Header clock font: 0 Cormorant Garamond Light, 1 Outfit Thin. */
+    static final String[] CLOCK_FONTS = {"Cormorant", "Outfit"};
+
+    static int clockFont(Context c) {
+        return of(c).getInt("clock_font", Config.get(c).defaultClockFont) == 1 ? 1 : 0;
+    }
+
+    static void setClockFont(Context c, int font) {
+        of(c).edit().putInt("clock_font", font).apply();
+    }
+
+    /** Secondary text size: 0 Normal, 1 Large, 2 Larger. */
+    static final String[] TEXT_SIZES = {"Normal", "Large", "Larger"};
+
+    static int textSize(Context c) {
+        return Math.max(0, Math.min(2, of(c).getInt("text_size", Config.get(c).defaultTextSize)));
+    }
+
+    static void setTextSize(Context c, int level) {
+        of(c).edit().putInt("text_size", Math.max(0, Math.min(2, level))).apply();
+    }
+
+    /**
+     * Sun times only, for the sky when prayer_enabled is false: the configured method, Shafi'i Asr and no
+     * offsets, so the panel's prayer settings never shift the sky.
+     */
+    static PrayerDay skyDay(Context c, long now) {
+        return new PrayerDay(c, now, where(c), Config.get(c).method, Madhab.SHAFI, new int[6]);
+    }
+
+    static PrayerDay day(Context c, long now) {
+        return new PrayerDay(c, now, where(c), METHODS[methodIndex(c)], hanafi(c) ? Madhab.HANAFI : Madhab.SHAFI, offsets(c));
+    }
+}

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pakistan, 3:2: white hoist band, green field, white crescent and star. A good template for drawing a new flag. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="12dp" android:height="8dp" android:viewportWidth="30" android:viewportHeight="20">
+    <clip-path android:pathData="M2,0 H28 A2,2 0 0 1 30,2 V18 A2,2 0 0 1 28,20 H2 A2,2 0 0 1 0,18 V2 A2,2 0 0 1 2,0 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M0,0 H7.5 V20 H0 Z" />
+    <path android:fillColor="#01411C" android:pathData="M7.5,0 H30 V20 H7.5 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M13.60,10.60 a5.0,5.0 0 1,0 10.0,0 a5.0,5.0 0 1,0 -10.0,0 Z" />
+    <path android:fillColor="#01411C" android:pathData="M15.90,9.10 a4.2,4.2 0 1,0 8.4,0 a4.2,4.2 0 1,0 -8.4,0 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M23.10,5.91 L22.86,7.05 L23.87,7.63 L22.71,7.75 L22.47,8.89 L21.99,7.83 L20.84,7.95 L21.70,7.17 L21.23,6.11 L22.24,6.69 Z" />
+</vector>

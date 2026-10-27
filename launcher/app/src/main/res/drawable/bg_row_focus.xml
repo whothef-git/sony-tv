@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focused row in the Inputs dropdown / Prayer settings panel. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#D8B46A" />
+    <corners android:radius="9dp" />
+</shape>

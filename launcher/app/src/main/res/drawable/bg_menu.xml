@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inputs dropdown and Prayer settings panel: lapis-800 @95% with a faint gold edge. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#F212264A" />
+    <stroke android:width="0.5dp" android:color="#40D8B46A" />
+    <corners android:radius="14dp" />
+</shape>

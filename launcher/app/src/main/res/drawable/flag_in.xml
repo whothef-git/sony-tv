@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- India, 3:2: saffron, white, green, the Ashoka chakra as a navy ring. From Afnon's flag_in.xml (MIT). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="12dp" android:height="8dp" android:viewportWidth="30" android:viewportHeight="20">
+    <clip-path android:pathData="M2,0 H28 A2,2 0 0 1 30,2 V18 A2,2 0 0 1 28,20 H2 A2,2 0 0 1 0,18 V2 A2,2 0 0 1 2,0 Z" />
+    <path android:fillColor="#FF9933" android:pathData="M0,0 H30 V6.667 H0 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M0,6.667 H30 V13.333 H0 Z" />
+    <path android:fillColor="#138808" android:pathData="M0,13.333 H30 V20 H0 Z" />
+    <path android:strokeColor="#000080" android:strokeWidth="0.7" android:fillColor="#00000000"
+        android:pathData="M15,7.6 A2.4,2.4 0 1 1 14.99,7.6 Z" />
+</vector>

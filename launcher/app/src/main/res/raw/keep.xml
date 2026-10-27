@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The flag is picked by name at runtime (config.xml second_flag), so keep every flag if resource
+     shrinking is ever turned on. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/flag_*" />

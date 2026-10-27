@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Canada, cut to 3:2 for the second-clock line; maple leaf from Afnon's flag_ca.xml (MIT) scaled 0.75. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="11dp" android:height="7.5dp" android:viewportWidth="30" android:viewportHeight="20.45">
+    <clip-path android:pathData="M2.7,0 H27.3 A2.7,2.7 0 0 1 30,2.7 V17.75 A2.7,2.7 0 0 1 27.3,20.45 H2.7 A2.7,2.7 0 0 1 0,17.75 V2.7 A2.7,2.7 0 0 1 2.7,0 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M0,0 H30 V20.45 H0 Z" />
+    <path android:fillColor="#D80621" android:pathData="M0,0 H7.5 V20.45 H0 Z M22.5,0 H30 V20.45 H22.5 Z" />
+    <group android:pivotX="20" android:pivotY="10" android:scaleX="0.75" android:scaleY="0.75" android:translateX="-5" android:translateY="0.2">
+        <path android:fillColor="#D80621"
+            android:pathData="M20,3 L21.3,5.6 L22.8,4.9 L22.3,8.6 L24.3,6.6 L24.8,7.9 L27,7.5 L26.2,9.9 L27.1,10.4 L23.6,13.3 L24,14.6 L20.4,14.2 L20.5,17 L19.5,17 L19.6,14.2 L16,14.6 L16.4,13.3 L12.9,10.4 L13.8,9.9 L13,7.5 L15.2,7.9 L15.7,6.6 L17.7,8.6 L17.2,4.9 L18.7,5.6 Z" />
+    </group>
+</vector>

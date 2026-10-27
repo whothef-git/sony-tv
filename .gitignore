@@ -1,0 +1,13 @@
+# Local toolchain and adb (large, per machine)
+toolchain/
+platform-tools/
+# Per-TV state: backups, disabled list, screenshots, your choices
+state/
+tools/tv.conf
+# Build output
+launcher/local.properties
+launcher/.gradle/
+launcher/build/
+launcher/app/build/
+*.apk
+.DS_Store
