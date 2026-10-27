@@ -139,3 +139,9 @@ an entry changed or removed, open an issue.
 App names and logos visible in the screenshots (streaming apps in the dock) belong to their owners and
 appear only because they were installed on the TV that was photographed. This project is not affiliated
 with Google, Sony or any app vendor.
+# Saudi flag artwork
+
+The Saudi Arabia vector is adapted from flag-icons 7.2.3, by Panayiotis Lipiridis and contributors.
+Source: https://github.com/lipis/flag-icons/tree/v7.2.3
+License: MIT; complete text in `launcher/third_party/flag-icons/LICENSE`.
+

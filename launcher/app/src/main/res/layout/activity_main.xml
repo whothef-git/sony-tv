@@ -11,6 +11,13 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <tv.widgetv.home.WeatherAtmosphereView
+        android:id="@+id/weather_atmosphere"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
     <ScrollView
         android:id="@+id/page"
         android:layout_width="match_parent"
@@ -24,6 +31,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clipChildren="false">
+
+            <!-- Draw the moving backlight UNDER the tiles so it cannot tint their artwork. -->
+            <tv.widgetv.home.GlassHighlight
+                android:id="@+id/glass"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
 
             <LinearLayout
                 android:id="@+id/column"
@@ -43,10 +56,11 @@
                          it is the focus target that opens Display settings. -->
                     <LinearLayout
                         android:id="@+id/header"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_gravity="top|start"
                         android:layout_marginStart="52dp"
+                        android:layout_marginEnd="260dp"
                         android:layout_marginTop="18dp"
                         android:clipChildren="false"
                         android:orientation="vertical">
@@ -72,7 +86,7 @@
                                 android:id="@+id/here_weather"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="22dp"
+                                android:layout_marginStart="8dp"
                                 android:baselineAlignedChildIndex="0"
                                 android:orientation="vertical"
                                 android:visibility="gone">
@@ -89,9 +103,9 @@
 
                         <TextView
                             android:id="@+id/date"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="4dp"
+                            android:layout_marginStart="0dp"
                             android:layout_marginTop="2dp"
                             android:fontFamily="@font/alexandria"
                             android:textColor="@color/plaster_100"
@@ -144,14 +158,20 @@
                                 android:src="@drawable/ic_settings" />
                         </LinearLayout>
 
-                        <!-- Second clock: flag, time, then icon + temp; high/low right-aligned under it. -->
+                        <!-- Right-aligned Saudi clock; current conditions beside the range below. -->
                         <LinearLayout
                             android:id="@+id/away_row"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
+                            android:gravity="end"
+                            android:orientation="vertical">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
 
                             <ImageView
                                 android:id="@+id/away_flag"
@@ -169,79 +189,112 @@
                                 android:textColor="@color/mist_400"
                                 android:textSize="22sp" />
 
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="3dp"
+                                android:baselineAligned="true"
+                                android:orientation="horizontal">
+
                             <TextView
                                 android:id="@+id/away_temp"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="14dp"
+                                android:layout_marginEnd="12dp"
                                 android:includeFontPadding="false"
                                 android:textColor="@color/mist_400"
-                                android:textSize="22sp"
+                                android:textSize="15sp"
                                 android:visibility="gone" />
-                        </LinearLayout>
 
                         <TextView
                             android:id="@+id/away_range"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="3dp"
                             android:fontFamily="@font/alexandria"
                             android:textColor="@color/mist_400"
                             android:textSize="10sp"
                             android:visibility="gone" />
+                            </LinearLayout>
+                        </LinearLayout>
                     </LinearLayout>
 
-                    <tv.widgetv.home.PrayerTimeline
-                        android:id="@+id/timeline"
+                    <tv.widgetv.home.ScreenTabs
+                        android:id="@+id/screen_tabs"
                         android:layout_width="match_parent"
-                        android:layout_height="76dp"
-                        android:layout_gravity="top"
-                        android:layout_marginEnd="56dp"
+                        android:layout_height="40dp"
                         android:layout_marginStart="56dp"
-                        android:layout_marginTop="178dp" />
+                        android:layout_marginEnd="56dp"
+                        android:layout_marginTop="154dp" />
 
-                    <!-- Thought of the day (res/raw/thoughts.json), centred between timeline and dock. -->
+                    <tv.widgetv.home.ForecastView
+                        android:id="@+id/forecast_screen"
+                        android:layout_width="match_parent"
+                        android:layout_height="185dp"
+                        android:layout_marginStart="56dp"
+                        android:layout_marginEnd="56dp"
+                        android:layout_marginTop="210dp"
+                        android:visibility="gone" />
+
+                    <!-- The original full-width prayer timeline, on its own read-only screen. -->
                     <LinearLayout
-                        android:id="@+id/thought"
+                        android:id="@+id/prayer_screen"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="top"
-                        android:layout_marginEnd="140dp"
-                        android:layout_marginStart="140dp"
-                        android:layout_marginTop="266dp"
+                        android:layout_gravity="top|start"
+                        android:layout_marginStart="56dp"
+                        android:layout_marginEnd="56dp"
+                        android:layout_marginTop="210dp"
+                        android:visibility="gone"
                         android:gravity="center_horizontal"
                         android:orientation="vertical">
 
-                        <TextView
-                            android:id="@+id/thought_tag"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/alexandria"
-                            android:letterSpacing="0.22"
-                            android:textAllCaps="true"
-                            android:textColor="@color/gold_400"
-                            android:textSize="10sp" />
+                        <tv.widgetv.home.PrayerTimeline
+                            android:id="@+id/timeline"
+                            android:layout_width="match_parent"
+                            android:layout_height="76dp" />
 
-                        <TextView
-                            android:id="@+id/thought_text"
-                            android:layout_width="wrap_content"
+                        <!-- Thought follows the timeline, aligned with the clock/date column. -->
+                        <LinearLayout
+                            android:id="@+id/thought"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:ellipsize="end"
-                            android:fontFamily="@font/cormorant_garamond_italic"
-                            android:gravity="center"
-                            android:maxLines="2"
-                            android:textColor="@color/plaster_100"
-                            android:textSize="19sp" />
+                            android:layout_marginTop="12dp"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
 
-                        <TextView
-                            android:id="@+id/thought_source"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/alexandria"
-                            android:textColor="@color/mist_400"
-                            android:textSize="10sp" />
+                            <TextView
+                                android:id="@+id/thought_tag"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="@font/alexandria"
+                                android:letterSpacing="0.22"
+                                android:textAllCaps="true"
+                                android:textColor="@color/gold_400"
+                                android:textSize="10sp" />
+
+                            <TextView
+                                android:id="@+id/thought_text"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:ellipsize="end"
+                                android:fontFamily="@font/cormorant_garamond_italic"
+                                android:gravity="center"
+                                android:maxLines="3"
+                                android:textColor="@color/plaster_100"
+                                android:textSize="19sp" />
+
+                            <TextView
+                                android:id="@+id/thought_source"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:fontFamily="@font/alexandria"
+                                android:textColor="@color/mist_400"
+                                android:textSize="10sp" />
+                        </LinearLayout>
                     </LinearLayout>
 
                     <!-- Slim dock: 56dp side margins matching timeline; floating without background panel. -->
@@ -310,10 +363,6 @@
                 android:padding="8dp"
                 android:visibility="gone" />
 
-            <tv.widgetv.home.GlassHighlight
-                android:id="@+id/glass"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
         </FrameLayout>
     </ScrollView>
 </FrameLayout>

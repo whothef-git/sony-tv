@@ -21,10 +21,9 @@ import java.util.Date;
  */
 final class PrayerDay {
     static final int FAJR = 0, SUNRISE = 1, DHUHR = 2, ASR = 3, MAGHRIB = 4, ISHA = 5;
-    static final String[] NAMES = {"Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"};
-    static final String[] HIJRI_MONTHS = {"Muharram", "Safar", "Rabi' al-Awwal", "Rabi' al-Thani",
-            "Jumada al-Ula", "Jumada al-Akhirah", "Rajab", "Sha'ban", "Ramadan", "Shawwal", "Dhu al-Qadah",
-            "Dhu al-Hijjah"}; // Afnon Text.java:310
+    static final String[] NAMES = {"Subuh", "Syuruk", "Zohor", "Asar", "Maghrib", "Isyak"};
+    static final String[] HIJRI_MONTHS = {"Muharam", "Safar", "Rabiul Awal", "Rabiul Akhir",
+            "Jamadil Awal", "Jamadil Akhir", "Rejab", "Syaaban", "Ramadan", "Syawal", "Zulkaedah", "Zulhijah"};
 
     final long now;
     /** Today's six times, epoch millis. */

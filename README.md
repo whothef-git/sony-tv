@@ -1,5 +1,33 @@
 # WidgeTV
 
+## Local TV build 1.6
+
+This customized build has Home, Prayer Time and Weather tabs, switched with the remote's D-pad.
+Home keeps the clocks, compact Gregorian/Malay Hijri dates, weather summaries and app dock.
+Prayer Time is a read-only, full-width official JAKIM SGR01 timeline with the daily thought.
+Weather uses the existing Open-Meteo feed for six hourly and five daily forecasts, translucent
+panels, and condition-driven background effects. Rain effects depend on current conditions,
+not forecast precipitation probability. The weather and secondary UI share the Outfit font.
+The existing ambient app focus effect is retained; navigation tabs use a neutral sliding underline.
+The app glow fades in place when moving between the dock and screen tabs, avoiding a rectangular flash.
+The local weather sits close to the main clock. Saudi time is right-aligned with current weather
+beside its high/low range below. The Saudi flag is approximately 21.3 × 16 scaled units.
+Gregorian and Malay Hijri dates use Outfit Regular at 15sp; local high/low and both Saudi
+temperature readings use Outfit Regular at 13sp. The Saudi weather icon is independently sized at 14sp.
+
+Version 1.6 was built and installed on Sony BRAVIA 4K UR3 (Android 10); all 16 on-device
+Home/Prayer Time/Weather navigation checks passed. Earlier parser verification covered 30 checks.
+
+AccuWeather integration is pending authenticated API access; this build does not claim to use
+AccuWeather or embed an AccuWeather key. Prayer calculation/offset controls have been removed.
+Official JAKIM schedules are cached and refreshed; unavailable official data is not presented as
+calculated prayer times.
+
+Build the Android app from `launcher/` with JDK 17 and Android SDK 34 using the Gradle wrapper.
+On Windows, use `gradlew.bat assembleDebug`.
+
+The upstream documentation below describes the original project and its original setup flow.
+
 **A calm, widget-first home screen for Android TV: a sky that moves with the day, glanceable clocks,
 weather and a daily thought, with prayer times built in.**
 

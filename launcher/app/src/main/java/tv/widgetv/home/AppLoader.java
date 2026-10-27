@@ -75,9 +75,19 @@ final class AppLoader {
         AppEntry cached = cache.get(cn);
         if (cached != null) return cached;
         Bitmap art = render(c.info);
-        AppEntry e = new AppEntry(cn, String.valueOf(c.label), c.leanback, art);
+        AppEntry e = new AppEntry(cn, String.valueOf(c.label), c.leanback, art, ambientColor(art));
         cache.put(cn, e);
         return e;
+    }
+
+    // Preserve the installed launcher's per-app backlight colors; compute once off the UI thread.
+    private static int ambientColor(Bitmap art) {
+        Palette palette = Palette.from(art).resizeBitmapArea(4096).generate();
+        int color = palette.getVibrantColor(palette.getDominantColor(0xFFFFD56B));
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        hsv[2] = Math.max(0.65f, hsv[2]);
+        return Color.HSVToColor(hsv);
     }
 
     void forget(String pkg) {
