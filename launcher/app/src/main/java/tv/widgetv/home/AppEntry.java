@@ -10,12 +10,14 @@ final class AppEntry {
     final String label;
     final boolean leanback;
     final Bitmap art;
+    final int ambientColor;
 
-    AppEntry(ComponentName component, String label, boolean leanback, Bitmap art) {
+    AppEntry(ComponentName component, String label, boolean leanback, Bitmap art, int ambientColor) {
         this.component = component;
         this.label = label;
         this.leanback = leanback;
         this.art = art;
+        this.ambientColor = ambientColor;
     }
 
     String pkg() {

@@ -76,7 +76,7 @@ public class MainActivity extends Activity {
         return getPackageName() + ".DEBUG_SKY";
     }
 
-    private enum Zone { TOP, TIMELINE, DOCK, GRID, MENU, PANEL }
+    private enum Zone { TOP, TABS, DOCK, GRID, MENU }
 
     private ScrollView page;
     private FrameLayout content;
@@ -86,13 +86,18 @@ public class MainActivity extends Activity {
     private TextView clock, awayClock, date, ssid;
     private ImageView[] pills; // the three round buttons: Inputs, Wi-Fi, Settings
     private Typeface ui;
-    private LinearLayout menu, panel;
+    private LinearLayout menu;
+    private ScreenTabs screenTabs;
+    private ForecastView forecastView;
+    private WeatherAtmosphereView atmosphere;
+    private View prayerScreen;
+    private int tabIdx;
     private RecyclerView dockList, gridList;
     private TileAdapter dockAdapter, gridAdapter;
     private List<TvInputs.Entry> menuEntries = new ArrayList<>();
 
     private Zone zone = Zone.DOCK;
-    private int pillIdx, dockIdx, gridIdx, menuIdx, panelIdx;
+    private int pillIdx, dockIdx, gridIdx, menuIdx;
     private String pendingPkg;        // focus to restore once apps are loaded
     private boolean resumed;
     private boolean needScroll = true;
@@ -118,8 +123,6 @@ public class MainActivity extends Activity {
     private LocalDate shownThoughtDate;
     private Config cfg;
     private View header, awayRow;
-    /** The panel's rows (ROW_* ids): all nine with prayer times on, only font and text size without. */
-    private int[] panelRows;
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -148,18 +151,21 @@ public class MainActivity extends Activity {
         cfg = Config.get(this);
         header = findViewById(R.id.header);
         awayRow = findViewById(R.id.away_row);
-        panelRows = cfg.prayerEnabled ? new int[]{ROW_ASR, ROW_METHOD, ROW_OFFSET, ROW_OFFSET + 1, ROW_OFFSET + 2,
-                ROW_OFFSET + 3, ROW_OFFSET + 4, ROW_FONT, ROW_TEXT_SIZE} : new int[]{ROW_FONT, ROW_TEXT_SIZE};
         timeline.setVisibility(cfg.prayerEnabled ? View.VISIBLE : View.GONE);
         // Second clock: hidden entirely when off; the flag is hidden when its drawable name is unknown.
         awayRow.setVisibility(cfg.secondEnabled ? View.VISIBLE : View.GONE);
         if (cfg.secondFlag != 0) awayFlag.setImageResource(cfg.secondFlag);
         else awayFlag.setVisibility(View.GONE);
         awayClock.setContentDescription(cfg.secondLabel);
-        ui = getResources().getFont(R.font.alexandria);
+        ui = Typeface.create(getResources().getFont(R.font.outfit), 400, false);
         date = findViewById(R.id.date);
+        date.setTypeface(ui);
+        date.setFontVariationSettings("'wght' 400");
         menu = findViewById(R.id.menu);
-        panel = findViewById(R.id.panel);
+        screenTabs = findViewById(R.id.screen_tabs);
+        forecastView = findViewById(R.id.forecast_screen);
+        atmosphere = findViewById(R.id.weather_atmosphere);
+        prayerScreen = findViewById(R.id.prayer_screen);
         pills = new ImageView[]{findViewById(R.id.btn_inputs), findViewById(R.id.btn_wifi),
                 findViewById(R.id.btn_settings)};
         dockPackages = Arrays.asList(getResources().getStringArray(R.array.dock_packages));
@@ -189,10 +195,10 @@ public class MainActivity extends Activity {
             zone = Zone.DOCK;
         }
         if (zone == Zone.MENU) zone = Zone.TOP;
-        if (zone == Zone.PANEL) zone = Zone.TIMELINE;
         pillIdx = prefs.getInt("pill", 0);
         pendingPkg = prefs.getString("pkg", null);
 
+        showScreen(0, false);
         content.getViewTreeObserver().addOnGlobalLayoutListener(this::onLayoutChanged);
         page.setOnScrollChangeListener((v, x, y, ox, oy) -> sky.setDim(y / (firstScreenH * 0.6f)));
 
@@ -220,6 +226,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        atmosphere.setRunning(tabIdx == 2);
         IntentFilter timeFilter = new IntentFilter(Intent.ACTION_TIME_TICK);
         timeFilter.addAction(Intent.ACTION_TIME_CHANGED);
         timeFilter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
@@ -232,9 +239,9 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        atmosphere.setRunning(false);
         unregisterReceiver(timeReceiver);
         if (zone == Zone.MENU) closeMenu();
-        if (zone == Zone.PANEL) closePanel();
         String pkg = focusedPkg();
         prefs.edit().putString("zone", zone.name()).putInt("pill", pillIdx).putString("pkg", pkg).apply();
     }
@@ -248,14 +255,14 @@ public class MainActivity extends Activity {
         if (BuildConfig.DEBUG) Log.d(TAG, "onNewIntent: resumed=" + resumed + " windowFocus=" + hasWindowFocus());
         if (atHome) {
             pendingPkg = null; // a still-loading app list must not restore the old focus over this
-            if (dockAdapter.getItemCount() == 0 && zone != Zone.MENU && zone != Zone.PANEL) {
+            if (dockAdapter.getItemCount() == 0 && zone != Zone.MENU) {
                 zone = Zone.DOCK;
                 dockIdx = 0; // applied by applyApps; with tiles present focus() below un-highlights the old one first
             }
         }
+        if (atHome) showScreen(0, false);
         if (atHome && dockAdapter.getItemCount() > 0) {
             if (zone == Zone.MENU) closeMenu();
-            if (zone == Zone.PANEL) closePanel();
             focus(Zone.DOCK, 0, true);
         }
     }
@@ -268,6 +275,44 @@ public class MainActivity extends Activity {
         getSystemService(ConnectivityManager.class).unregisterNetworkCallback(networkCallback);
         io.shutdownNow();
         weather.shutdown();
+    }
+
+    private void showScreen(int index, boolean animate) {
+        int previous = tabIdx;
+        boolean changed = previous != index;
+        tabIdx = index;
+        screenTabs.setState(index, zone == Zone.TABS);
+        atmosphere.setScreenActive(index == 2, animate);
+        atmosphere.setRunning(resumed && index == 2);
+        View target = index == 1 ? prayerScreen : index == 2 ? forecastView : null;
+        if (!animate) {
+            prayerScreen.animate().cancel(); forecastView.animate().cancel();
+            prayerScreen.setVisibility(index == 1 ? View.VISIBLE : View.GONE);
+            forecastView.setVisibility(index == 2 ? View.VISIBLE : View.GONE);
+            prayerScreen.setAlpha(1f); forecastView.setAlpha(1f);
+            prayerScreen.setTranslationX(0); forecastView.setTranslationX(0);
+        } else if (changed) {
+            float direction = index > previous ? 1f : -1f;
+            View outgoing = previous == 1 ? prayerScreen : previous == 2 ? forecastView : null;
+            if (outgoing != null) {
+                outgoing.animate().cancel();
+                outgoing.animate().alpha(0f).translationX(-direction * dp(8)).setDuration(220)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator()).withLayer()
+                        .withEndAction(() -> {
+                            if (tabIdx != previous) {
+                                outgoing.setVisibility(View.GONE); outgoing.setTranslationX(0); outgoing.setAlpha(1f);
+                            }
+                        }).start();
+            }
+            if (target != null) {
+                target.animate().cancel();
+                if (target.getVisibility() != View.VISIBLE) { target.setAlpha(0f); target.setTranslationX(direction * dp(8)); }
+                target.setVisibility(View.VISIBLE);
+                target.animate().alpha(1f).translationX(0).setDuration(220)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator()).withLayer().start();
+            }
+        }
+        Log.i(TAG, "screen: " + ScreenTabs.LABELS[index]);
     }
 
     // ---------------------------------------------------------------- apps
@@ -305,7 +350,7 @@ public class MainActivity extends Activity {
         dockIdx = clamp(dockIdx, dock.size());
         gridIdx = clamp(gridIdx, grid.size());
         if (zone == Zone.GRID && grid.isEmpty()) zone = Zone.DOCK;
-        if (zone == Zone.DOCK && dock.isEmpty()) zone = Zone.TIMELINE;
+        if (zone == Zone.DOCK && dock.isEmpty()) zone = Zone.TABS;
         dockAdapter.focused = zone == Zone.DOCK ? dockIdx : -1;
         gridAdapter.focused = zone == Zone.GRID ? gridIdx : -1;
         if (zone == Zone.TOP) setLook(true);
@@ -355,9 +400,12 @@ public class MainActivity extends Activity {
                 if (!down && !ev.isCanceled()) select();
                 return true;
             case KeyEvent.KEYCODE_BACK:
-                // Home never goes "back"; Back only closes the dropdown or the panel.
-                if (!down && zone == Zone.MENU) closeMenu();
-                if (!down && zone == Zone.PANEL) closePanel();
+                // Back closes Inputs first; otherwise it returns to the Home screen.
+                if (!down && zone == Zone.MENU) { closeMenu(); return true; }
+                if (!down && tabIdx != 0) {
+                    showScreen(0, true);
+                    if (zone == Zone.TABS) focus(Zone.TABS, 0, true);
+                }
                 return true;
             default:
                 return super.dispatchKeyEvent(ev);
@@ -372,17 +420,19 @@ public class MainActivity extends Activity {
             case TOP:
                 if (left && pillIdx > 0) focus(Zone.TOP, pillIdx - 1, true);
                 else if (right && pillIdx < pills.length - 1) focus(Zone.TOP, pillIdx + 1, true);
-                else if (dn) focus(Zone.TIMELINE, 0, true);
+                else if (dn) focus(Zone.TABS, tabIdx, true);
                 break;
-            case TIMELINE:
-                if (up) focus(Zone.TOP, pillIdx, true);
+            case TABS:
+                if (left && tabIdx > 0) focus(Zone.TABS, tabIdx - 1, true);
+                else if (right && tabIdx < 2) focus(Zone.TABS, tabIdx + 1, true);
+                else if (up) focus(Zone.TOP, pillIdx, true);
                 else if (dn && dockN > 0) focus(Zone.DOCK, clamp(dockIdx, dockN), true);
                 else if (dn && gridN > 0) focus(Zone.GRID, clamp(gridIdx, gridN), true);
                 break;
             case DOCK:
                 if (left && dockIdx > 0) focus(Zone.DOCK, dockIdx - 1, true);
                 else if (right && dockIdx < dockN - 1) focus(Zone.DOCK, dockIdx + 1, true);
-                else if (up) focus(Zone.TIMELINE, 0, true);
+                else if (up) focus(Zone.TABS, tabIdx, true);
                 else if (dn && gridN > 0) focus(Zone.GRID, Math.min(dockIdx, gridN - 1), true);
                 break;
             case GRID: {
@@ -391,7 +441,7 @@ public class MainActivity extends Activity {
                 else if (right && col < COLS - 1 && gridIdx + 1 < gridN) focus(Zone.GRID, gridIdx + 1, true);
                 else if (up && row > 0) focus(Zone.GRID, gridIdx - COLS, true);
                 else if (up && dockN > 0) focus(Zone.DOCK, clamp(dockIdx, dockN), true); // last focused dock tile
-                else if (up) focus(Zone.TIMELINE, 0, true);
+                else if (up) focus(Zone.TABS, tabIdx, true);
                 else if (dn && gridIdx + COLS < gridN) focus(Zone.GRID, gridIdx + COLS, true);
                 else if (dn && (row + 1) * COLS < gridN) focus(Zone.GRID, gridN - 1, true); // short last row
                 break;
@@ -399,11 +449,6 @@ public class MainActivity extends Activity {
             case MENU:
                 if (up && menuIdx > 0) focus(Zone.MENU, menuIdx - 1, true);
                 else if (dn && menuIdx < menuEntries.size() - 1) focus(Zone.MENU, menuIdx + 1, true);
-                break;
-            case PANEL:
-                if (up && panelIdx > 0) focus(Zone.PANEL, panelIdx - 1, true);
-                else if (dn && panelIdx < panelRows.length - 1) focus(Zone.PANEL, panelIdx + 1, true);
-                else if (left || right) changeSetting(panelRows[panelIdx], right ? 1 : -1);
                 break;
         }
     }
@@ -415,9 +460,8 @@ public class MainActivity extends Activity {
                 else if (pillIdx == 1) start(new Intent(Settings.ACTION_WIFI_SETTINGS));
                 else start(new Intent(Settings.ACTION_SETTINGS));
                 break;
-            case TIMELINE:
-                openPanel();
-                break;
+            case TABS:
+                break; // Read-only screens switch on focus, never open prayer settings.
             case DOCK:
                 if (dockIdx < dockAdapter.items.size()) start(dockAdapter.items.get(dockIdx).launchIntent());
                 break;
@@ -428,9 +472,6 @@ public class MainActivity extends Activity {
                 Intent intent = menuEntries.get(menuIdx).intent;
                 closeMenu();
                 start(intent);
-                break;
-            case PANEL:
-                closePanel();
                 break;
         }
     }
@@ -453,7 +494,7 @@ public class MainActivity extends Activity {
             case DOCK: dockIdx = idx; break;
             case GRID: gridIdx = idx; break;
             case MENU: menuIdx = idx; break;
-            case PANEL: panelIdx = idx; break;
+            case TABS: showScreen(idx, true); break;
             default: break;
         }
         dockAdapter.focused = z == Zone.DOCK ? dockIdx : -1;
@@ -466,11 +507,11 @@ public class MainActivity extends Activity {
     private View focusedView() {
         switch (zone) {
             case TOP: return pills[pillIdx];
-            case TIMELINE: return cfg.prayerEnabled ? timeline : header;
+            case TABS: return screenTabs;
             case DOCK: return dockList.getLayoutManager().findViewByPosition(dockIdx);
             case GRID: return gridList.getLayoutManager().findViewByPosition(gridIdx);
             case MENU: return menu.getChildAt(menuIdx);
-            default: return panel.getChildAt(panelIdx + 1); // child 0 is the title
+            default: return null;
         }
     }
 
@@ -490,8 +531,10 @@ public class MainActivity extends Activity {
                 break;
             }
             case MENU:
-            case PANEL:
                 rowLook(v, on);
+                break;
+            case TABS:
+                screenTabs.setState(tabIdx, on);
                 break;
             default:
                 break;
@@ -514,6 +557,25 @@ public class MainActivity extends Activity {
 
     /** Re-place the ring after any layout pass (data loaded, SSID text width changed, menu shown). */
     private void onLayoutChanged() {
+        int tabsTop = header.getBottom() + dp(2);
+        FrameLayout.LayoutParams nav = (FrameLayout.LayoutParams) screenTabs.getLayoutParams();
+        if (header.getHeight() > 0 && nav.topMargin != tabsTop) {
+            nav.topMargin = tabsTop;
+            screenTabs.setLayoutParams(nav);
+        }
+        int screenTop = tabsTop + dp(52);
+        FrameLayout.LayoutParams prayerLp = (FrameLayout.LayoutParams) prayerScreen.getLayoutParams();
+        if (prayerLp.topMargin != screenTop) {
+            prayerLp.topMargin = screenTop;
+            prayerScreen.setLayoutParams(prayerLp);
+        }
+        FrameLayout.LayoutParams forecastLp = (FrameLayout.LayoutParams) forecastView.getLayoutParams();
+        int available = Math.max(dp(160), findViewById(R.id.dock_band).getTop() - screenTop - dp(22));
+        if (forecastLp.topMargin != screenTop || forecastLp.height != available) {
+            forecastLp.topMargin = screenTop;
+            forecastLp.height = available;
+            forecastView.setLayoutParams(forecastLp);
+        }
         if (needScroll && focusedView() != null) {
             needScroll = false;
             if (zone == Zone.TOP) setLook(true);
@@ -523,6 +585,11 @@ public class MainActivity extends Activity {
     }
 
     private void updateGlass(boolean animate) {
+        // Fade the app glow in place; never morph it into a tab/control rectangle.
+        if (zone != Zone.DOCK && zone != Zone.GRID) {
+            glass.setRingVisible(false);
+            return;
+        }
         View v = focusedView();
         if (v == null || v.getWidth() == 0) return;
         RectF r;
@@ -533,7 +600,7 @@ public class MainActivity extends Activity {
             View card = v.findViewById(R.id.card);
             r = rectInContent(card);
             radius = 0f;
-        } else if (zone == Zone.TIMELINE) {
+        } else if (zone == Zone.TABS) {
             r = rectInContent(v);
             r.inset(-dp(14), -dp(8));
             radius = dp(16);
@@ -542,9 +609,16 @@ public class MainActivity extends Activity {
             radius = r.height() / 2;
         }
 
-        boolean ring = zone == Zone.TIMELINE || zone == Zone.DOCK || zone == Zone.GRID;
+        boolean ring = zone == Zone.DOCK || zone == Zone.GRID;
         String focusLog = "focus: zone=" + zone + " ring=" + ring + " rect=" + r.toShortString() + " isDock=" + isDock;
         if (BuildConfig.DEBUG && !focusLog.equals(lastFocusLog)) Log.d(TAG, lastFocusLog = focusLog);
+        if (isDock || zone == Zone.GRID) {
+            TileAdapter adapter = isDock ? dockAdapter : gridAdapter;
+            int index = isDock ? dockIdx : gridIdx;
+            if (index >= 0 && index < adapter.items.size()) {
+                glass.setAmbientColor(adapter.items.get(index).ambientColor, animate);
+            }
+        }
         glass.setRingVisible(ring);
         glass.moveTo(r, radius, isDock, animate);
     }
@@ -609,113 +683,6 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    // ---------------------------------------------------------------- Prayer settings panel
-
-    /** Row ids: Asr school, method, the five offsets (Fajr, Dhuhr, Asr, Maghrib, Isha), clock font, text size. */
-    private static final int ROW_ASR = 0, ROW_METHOD = 1, ROW_OFFSET = 2, ROW_FONT = 7, ROW_TEXT_SIZE = 8;
-
-    private void openPanel() {
-        panel.removeAllViews();
-        LinearLayout title = new LinearLayout(this);
-        String titleText = cfg.prayerEnabled
-                ? getString(R.string.prayer_settings) + (cfg.cityLabel.isEmpty() ? "" : "  ·  " + cfg.cityLabel + (day != null && day.isJakim ? " (JAKIM)" : ""))
-                : getString(R.string.display_settings);
-        title.addView(rowText(titleText, 15, Lapis.GOLD_400),
-                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-        title.addView(rowText("◀ ▶ change   ·   OK close", 11, Lapis.MIST_400),
-                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        title.setPadding(dp(14), 0, dp(14), 0);
-        panel.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)));
-        for (int i = 0; i < panelRows.length; i++) {
-            LinearLayout row = new LinearLayout(this);
-            row.setPadding(dp(14), 0, dp(14), 0);
-            row.addView(rowText("", 14, Lapis.PLASTER_100), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-            row.addView(rowText("", 14, Lapis.GOLD_400),
-                    new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            panel.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)));
-        }
-        renderPanel();
-        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) panel.getLayoutParams();
-        int panelH = dp(30 + 28 * panelRows.length + 16);
-        if (cfg.prayerEnabled) {
-            RectF tl = rectInContent(timeline);
-            lp.leftMargin = (int) (tl.centerX() - dp(210));
-            // Just under the timeline's prayer times (they stay visible), never past the first screen's bottom.
-            lp.topMargin = (int) Math.min(tl.top + dp(52), firstScreenH - dp(8) - panelH);
-        } else {
-            RectF hd = rectInContent(header); // under the clock header it was opened from
-            lp.leftMargin = (int) hd.left;
-            lp.topMargin = (int) Math.min(hd.bottom + dp(16), firstScreenH - dp(8) - panelH);
-        }
-        panel.setLayoutParams(lp);
-        panel.setAlpha(0f);
-        panel.setVisibility(View.VISIBLE);
-        panel.animate().alpha(1f).setDuration(160).start();
-        focus(Zone.PANEL, 0, true);
-    }
-
-    private void closePanel() {
-        panel.setVisibility(View.GONE);
-        panel.removeAllViews();
-        zone = Zone.TIMELINE;
-        focus(Zone.TIMELINE, 0, true);
-    }
-
-    private void renderPanel() {
-        if (panel.getChildCount() < panelRows.length + 1) return;
-        for (int k = 0; k < panelRows.length; k++) {
-            ViewGroup row = (ViewGroup) panel.getChildAt(k + 1);
-            int i = panelRows[k];
-            String label, value;
-            if (i == ROW_ASR) {
-                label = "Asr school";
-                value = PrayerPrefs.hanafi(this) ? "Hanafi" : "Shafi'i";
-            } else if (i == ROW_METHOD) {
-                label = "Method";
-                value = PrayerPrefs.METHOD_NAMES[PrayerPrefs.methodIndex(this)];
-            } else if (i == ROW_FONT) {
-                label = "Clock font";
-                value = PrayerPrefs.CLOCK_FONTS[PrayerPrefs.clockFont(this)];
-            } else if (i == ROW_TEXT_SIZE) {
-                label = "Text size";
-                value = PrayerPrefs.TEXT_SIZES[PrayerPrefs.textSize(this)];
-            } else {
-                int prayer = PrayerPrefs.OFFSET_PRAYERS[i - ROW_OFFSET];
-                int off = PrayerPrefs.offset(this, prayer);
-                label = PrayerDay.NAMES[prayer] + " offset";
-                value = (off > 0 ? "+" : off < 0 ? "−" : "") + Math.abs(off) + " min   ·   "
-                        + clockText(day.times[prayer]);
-            }
-            ((TextView) row.getChildAt(0)).setText(label);
-            ((TextView) row.getChildAt(1)).setText("‹  " + value + "  ›");
-            rowLook(row, zone == Zone.PANEL && k == panelIdx);
-        }
-    }
-
-    private void changeSetting(int row, int dir) {
-        if (row == ROW_ASR) {
-            PrayerPrefs.setHanafi(this, !PrayerPrefs.hanafi(this));
-        } else if (row == ROW_METHOD) {
-            int n = PrayerPrefs.METHODS.length;
-            PrayerPrefs.setMethodIndex(this, (PrayerPrefs.methodIndex(this) + dir + n) % n);
-        } else if (row == ROW_FONT) {
-            PrayerPrefs.setClockFont(this, 1 - PrayerPrefs.clockFont(this));
-            applyClockFont();
-        } else if (row == ROW_TEXT_SIZE) {
-            PrayerPrefs.setTextSize(this, (PrayerPrefs.textSize(this) + dir + 3) % 3);
-            applyTextSize();
-        } else {
-            int prayer = PrayerPrefs.OFFSET_PRAYERS[row - ROW_OFFSET];
-            PrayerPrefs.setOffset(this, prayer, PrayerPrefs.offset(this, prayer) + dir);
-        }
-        refreshPrayer();
-        renderPanel();
-        Log.i(TAG, "prayer settings: hanafi=" + PrayerPrefs.hanafi(this) + " method="
-                + PrayerPrefs.METHODS[PrayerPrefs.methodIndex(this)] + " offsets=" + Arrays.toString(PrayerPrefs.offsets(this))
-                + " clockFont=" + PrayerPrefs.CLOCK_FONTS[PrayerPrefs.clockFont(this)]
-                + " textSize=" + PrayerPrefs.TEXT_SIZES[PrayerPrefs.textSize(this)] + " times=" + timesLog());
-    }
-
     // ---------------------------------------------------------------- clock, date, prayer, weather
 
     private final BroadcastReceiver timeReceiver = new BroadcastReceiver() {
@@ -754,6 +721,7 @@ public class MainActivity extends Activity {
         clock.setText(hm(local, h24));
         refreshPrayer(); // also redraws the date line and the second-clock line
         weather.maybeFetch(false, this::renderDateAndWeather);
+        JakimProvider.maybeRefresh(this, () -> { if (resumed) refreshPrayer(); });
     }
 
     /** "12:30" (or "00:30" in 24-hour mode), no AM/PM. */
@@ -782,28 +750,27 @@ public class MainActivity extends Activity {
      */
     private void applyTextSize() {
         int l = PrayerPrefs.textSize(this);
-        float[] hereT = {24, 28, 32}, dateT = {14, 16, 18}, awayT = {22, 26, 30}, awayR = {10, 13, 15},
-                times = {15, 17, 19}, names = {11, 13, 15}, tag = {10, 11, 12}, text = {19, 21, 23}, src = {10, 12, 14};
+        float[] hereT = {24, 28, 32}, dateT = {11, 12, 13}, awayT = {22, 26, 30}, awayR = {13, 15, 17};
         hereTemp.setTextSize(TypedValue.COMPLEX_UNIT_SP, hereT[l]);
-        date.setTextSize(TypedValue.COMPLEX_UNIT_SP, dateT[l]);
+        date.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         awayClock.setTextSize(TypedValue.COMPLEX_UNIT_SP, awayT[l]);
-        awayTemp.setTextSize(TypedValue.COMPLEX_UNIT_SP, awayT[l]);
-        awayRange.setTextSize(TypedValue.COMPLEX_UNIT_SP, awayR[l]);
-        float flag = awayT[l] / 22f; // the 22x15px flag grows with the second-clock time
+        awayTemp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        awayRange.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         ViewGroup.LayoutParams fl = awayFlag.getLayoutParams();
-        fl.width = dp(11 * flag);
-        fl.height = dp(7.5f * flag);
+        fl.height = Math.round(16 * getResources().getDisplayMetrics().scaledDensity);
+        fl.width = Math.round((64f / 3f) * getResources().getDisplayMetrics().scaledDensity);
+        awayFlag.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         awayFlag.setLayoutParams(fl);
-        int timelineDp = Math.max(76, timeline.setTextScale(times[l], names[l]));
+        int timelineDp = timeline.setTextScale(15 + l * 2, 11 + l * 2);
         timeline.getLayoutParams().height = dp(timelineDp);
         timeline.requestLayout();
-        FrameLayout.LayoutParams tp = (FrameLayout.LayoutParams) thought.getLayoutParams();
-        // Below the timeline; without prayer times the thought takes the timeline's place.
-        tp.topMargin = cfg.prayerEnabled ? dp(178 + timelineDp + 12) : dp(214);
+        LinearLayout.LayoutParams tp = (LinearLayout.LayoutParams) thought.getLayoutParams();
+        // Stack below the timeline so larger text and wrapped thoughts cannot overlap.
+        tp.topMargin = cfg.prayerEnabled ? dp(12) : 0;
         thought.setLayoutParams(tp);
-        thoughtTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, tag[l]);
-        thoughtText.setTextSize(TypedValue.COMPLEX_UNIT_SP, text[l]);
-        thoughtSource.setTextSize(TypedValue.COMPLEX_UNIT_SP, src[l]);
+        thoughtTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10 + l);
+        thoughtText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19 + l * 2);
+        thoughtSource.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9 + l);
         if (day != null) renderDateAndWeather();
     }
 
@@ -817,8 +784,11 @@ public class MainActivity extends Activity {
         // Temperatures in the clock family: light beside the main clock, as heavy as the second-clock time beside it.
         hereTemp.setTypeface(tf);
         hereTemp.setFontVariationSettings(outfit ? "'wght' 200" : "'wght' 300");
-        awayTemp.setTypeface(tf);
-        awayTemp.setFontVariationSettings(outfit ? "'wght' 300" : "'wght' 500");
+        Typeface weatherFont = Typeface.create(getResources().getFont(R.font.outfit), 400, false);
+        awayTemp.setTypeface(weatherFont);
+        awayTemp.setFontVariationSettings("'wght' 400");
+        awayRange.setTypeface(weatherFont);
+        awayRange.setFontVariationSettings("'wght' 400");
         // Cormorant's default figures are old-style (x-height); clocks want lining figures.
         for (TextView t : new TextView[]{clock, awayClock, hereTemp, awayTemp}) t.setFontFeatureSettings("lnum");
     }
@@ -830,8 +800,8 @@ public class MainActivity extends Activity {
      */
     private void refreshPrayer() {
         long now = nowMillis();
-        day = cfg.prayerEnabled ? PrayerPrefs.day(this, now) : PrayerPrefs.skyDay(this, now);
-        if (cfg.prayerEnabled) timeline.setDay(day);
+        day = PrayerPrefs.skyDay(this, now); // Official SGR01, zero user offsets; astronomy is only a sky fallback.
+        timeline.setDay(day.isJakim ? day : null);
         sky.update(day);
         renderDateAndWeather();
         renderThought();
@@ -841,6 +811,8 @@ public class MainActivity extends Activity {
     private void renderDateAndWeather() {
         if (day == null) return;
         Weather.City[] w = weather.current();
+        if (forecastView != null) forecastView.setWeather(w, weather.forecast(), weather.lastFetchFailed());
+        if (atmosphere != null) atmosphere.setWeather(w == null ? null : w[0]);
         boolean h24 = DateFormat.is24HourFormat(this);
         ZonedDateTime local = nowZoned();
         ZonedDateTime away = local.withZoneSameInstant(cfg.secondZone);
@@ -852,14 +824,14 @@ public class MainActivity extends Activity {
         append(sb, DateFormat.format("EEEE d MMMM", nowMillis()), Lapis.PLASTER_100);
         if (cfg.prayerEnabled) {
             append(sb, "   ·   ", Lapis.MIST_400);
-            append(sb, day.hijri(), Lapis.GOLD_400);
-            if (day != null && day.isJakim) {
-                append(sb, " (JAKIM)", Lapis.alpha(Lapis.GOLD_400, 0.85f));
-            }
+            append(sb, day.isJakim ? day.hijri() : "Tarikh Hijri belum tersedia", Lapis.GOLD_400);
         }
         if (w != null && w[0].hasRange) {
-            append(sb, "   ·   ", Lapis.MIST_400);
+            sb.append('\n');
+            int rangeStart = sb.length();
             sb.append(rangeText(w[0], Lapis.MIST_400));
+            sb.setSpan(new android.text.style.AbsoluteSizeSpan(Math.round(13 * getResources().getDisplayMetrics().scaledDensity)),
+                    rangeStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         date.setText(sb);
 
@@ -871,7 +843,11 @@ public class MainActivity extends Activity {
         if (w == null) return;
         hereTemp.setText(tempText(w[0], Lapis.PLASTER_100, hereTemp.getTextSize()));
         if (!awayW) return;
-        awayTemp.setText(tempText(w[1], Lapis.MIST_400, awayTemp.getTextSize()));
+        SpannableStringBuilder awayConditions = new SpannableStringBuilder();
+        appendIcon(awayConditions, Weather.icon(w[1]), Lapis.MIST_400,
+                14 * getResources().getDisplayMetrics().scaledDensity);
+        awayConditions.append(" ").append(String.valueOf(w[1].temp)).append("°");
+        awayTemp.setText(awayConditions);
         awayRange.setText(rangeText(w[1], Lapis.alpha(Lapis.MIST_400, 0.7f)));
     }
 
@@ -1003,6 +979,11 @@ public class MainActivity extends Activity {
             Log.i(TAG, "debug: period=" + sky.forcedPeriod + " pattern=" + sky.forcedPattern + " fakeMinutes=" + fakeMinutes
                     + " fakeDate=" + fakeDate + " now=" + nowZoned());
             if (intent.getBooleanExtra("weather_refresh", false)) weather.maybeFetch(true, MainActivity.this::renderDateAndWeather);
+            if (intent.hasExtra("weather_effect_preview")) {
+                int preview = intent.getIntExtra("weather_effect_preview", -1);
+                atmosphere.setPreviewCode(preview);
+                Log.i(TAG, "weather visual effect preview: " + preview);
+            }
             // Everything time-based (both clocks, weekday prefix, date line, sky, timeline, thought) reads nowMillis().
             renderClocks();
         }

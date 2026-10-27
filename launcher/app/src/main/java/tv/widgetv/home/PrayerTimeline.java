@@ -30,7 +30,7 @@ public final class PrayerTimeline extends View {
             nextName = new Paint(Paint.ANTI_ALIAS_FLAG);
     private PrayerDay day;
     /** Baselines (px) for the time and name rows; set by setTextScale. */
-    private float timeY, nameY;
+    private float timeY, nameY, countdownY;
     private boolean h24;
     /** Last drawn values, for the debug receipt in the log. */
     float lastFraction, lastDotX;
@@ -70,6 +70,7 @@ public final class PrayerTimeline extends View {
         float timeDp = 30 + timeSp * 0.95f, nameDp = timeDp + 6 + nameSp * 1.25f;
         timeY = timeDp * d;
         nameY = nameDp * d;
+        countdownY = (nameDp + nameSp * 1.4f + 8) * d;
         invalidate();
         return Math.round(nameDp + nameSp * 0.4f + 4);
     }
@@ -100,7 +101,10 @@ public final class PrayerTimeline extends View {
 
     @Override
     protected void onDraw(Canvas c) {
-        if (day == null) return;
+        if (day == null) {
+            c.drawText("Jadual JAKIM belum tersedia", getWidth() / 2f, timeY, name);
+            return;
+        }
         int w = getWidth();
         float lineY = 8 * d, x0 = columnX(0), x4 = columnX(4);
         long now = day.now;
@@ -140,11 +144,12 @@ public final class PrayerTimeline extends View {
         for (int i = 0; i < 5; i++) {
             int prayer = COLUMNS[i];
             boolean isNext = i == next || (next == 5 && i == 0);
-            long t = next == 5 && i == 0 ? day.tomorrowFajr : day.times[prayer];
+            boolean nextKnown = day.tomorrowFajr != Long.MAX_VALUE;
+            long t = next == 5 && i == 0 && nextKnown ? day.tomorrowFajr : day.times[prayer];
             float x = columnX(i);
             c.drawText(clock(t), x, timeY, isNext ? nextTime : time);
             String label = PrayerDay.NAMES[prayer];
-            if (isNext) label += "  ·  in " + countdown(t - now);
+            if (isNext && (next != 5 || nextKnown)) label += " · in " + countdown(t - now);
             c.drawText(label, x, nameY, isNext ? nextName : name);
         }
     }
@@ -155,7 +160,7 @@ public final class PrayerTimeline extends View {
     }
 
     private String clock(long t) {
-        java.util.Calendar cal = java.util.Calendar.getInstance();
+        java.util.Calendar cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kuala_Lumpur"));
         cal.setTimeInMillis(t);
         int h = cal.get(java.util.Calendar.HOUR_OF_DAY), m = cal.get(java.util.Calendar.MINUTE);
         if (h24) return String.format(Locale.US, "%02d:%02d", h, m);

@@ -4,20 +4,29 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.View;
-import android.view.animation.OvershootInterpolator;
+import android.view.animation.DecelerateInterpolator;
 
 /**
  * Ambient Backlight Glow behind apps & Light-Up Underline below app name:
- * - Generates a mathematically smooth cosine/Gaussian backlight glow bitmap.
- * - Inside the card boundary: 100% transparent (0 alpha, never inside the app).
- * - Outside the card: ultra-smooth radiant amber-gold light falloff into the background (zero box, zero hard lines).
- * - Illuminated gold underline bar with multi-layer soft bloom directly below the active app name.
+ * - A continuous soft backlight, drawn below the opaque app artwork.
+ * - No transparent rectangular cutout: the light stays filled while crossing gaps between apps.
+ * - A crisp underline below the active app name.
  */
 public final class GlassHighlight extends View {
+    static final long FOCUS_DURATION_MS = 220;
+    private int ambientColor = 0xFFFFD56B;
+    private int targetAmbientColor = ambientColor;
+    private final float[] fromHsv = new float[3];
+    private final float[] toHsv = new float[3];
+    private final float[] curHsv = new float[3];
+    private final ValueAnimator colorAnim = ValueAnimator.ofFloat(0f, 1f);
     private final RectF from = new RectF();
     private final RectF to = new RectF();
     private final RectF cur = new RectF();
@@ -49,12 +58,12 @@ public final class GlassHighlight extends View {
     public GlassHighlight(Context c, AttributeSet a) {
         super(c, a);
         float d = getResources().getDisplayMetrics().density;
-        glowPad = 26f * d; // 52px halo spread
+        glowPad = 48f * d; // Broad ambient spill beyond all four sides of the app.
 
-        // Generate smooth continuous ambient glow (zero hard lines, 0 alpha inside card)
+        // A filled glow is safe here because this view is behind the app artwork.
         int cardW = Math.round(102f * d); // ~205px
         int cardH = Math.round(58f * d);  // ~115px
-        glowBitmap = createGlowBitmap(cardW, cardH, Math.round(glowPad), 0x95FFD56B);
+        glowBitmap = createGlowBitmap(cardW, cardH, Math.round(glowPad), 0xD0FFD56B);
 
         // Sharp Underline (Solid gold, crisp 90-degree edges, zero shadow, zero glow)
         lineCore.setStyle(Paint.Style.FILL);
@@ -65,8 +74,21 @@ public final class GlassHighlight extends View {
         goldRing.setStrokeWidth(2f * d);
         goldRing.setColor(0xFFD8B46A);
 
-        anim.setDuration(260);
-        anim.setInterpolator(new OvershootInterpolator(1.1f));
+        colorAnim.setDuration(FOCUS_DURATION_MS);
+        colorAnim.setInterpolator(new DecelerateInterpolator());
+        colorAnim.addUpdateListener(va -> {
+            float t = (float) va.getAnimatedValue();
+            float hueDelta = (toHsv[0] - fromHsv[0] + 540f) % 360f - 180f;
+            curHsv[0] = (fromHsv[0] + hueDelta * t + 360f) % 360f;
+            curHsv[1] = lerp(fromHsv[1], toHsv[1], t);
+            curHsv[2] = lerp(fromHsv[2], toHsv[2], t);
+            ambientColor = Color.HSVToColor(curHsv);
+            applyAmbientColor();
+            invalidate();
+        });
+        applyAmbientColor();
+        anim.setDuration(FOCUS_DURATION_MS);
+        anim.setInterpolator(new DecelerateInterpolator());
         anim.addUpdateListener(va -> {
             float t = (float) va.getAnimatedValue();
             cur.set(lerp(from.left, to.left, t), lerp(from.top, to.top, t),
@@ -80,7 +102,7 @@ public final class GlassHighlight extends View {
         });
     }
 
-    /** Pre-computes smooth cosine light decay behind the card boundary. */
+    /** Soft elliptical light with no rectangular hole or sharp inner boundary. */
     private static Bitmap createGlowBitmap(int cardW, int cardH, int pad, int glowColor) {
         int totalW = cardW + pad * 2;
         int totalH = cardH + pad * 2;
@@ -93,29 +115,16 @@ public final class GlassHighlight extends View {
 
         for (int y = 0; y < totalH; y++) {
             for (int x = 0; x < totalW; x++) {
-                int dx = 0;
-                if (x < pad) dx = pad - x;
-                else if (x >= pad + cardW) dx = x - (pad + cardW);
-
-                int dy = 0;
-                if (y < pad) dy = pad - y;
-                else if (y >= pad + cardH) dy = y - (pad + cardH);
-
-                if (dx == 0 && dy == 0) {
-                    // Inside the card -> completely transparent (0 alpha, never inside the app!)
-                    pixels[y * totalW + x] = 0;
-                } else {
-                    float dist = (float) Math.sqrt(dx * dx + dy * dy);
-                    if (dist >= pad) {
-                        pixels[y * totalW + x] = 0;
-                    } else {
-                        // Smooth S-curve cosine falloff from 1.0 down to 0.0
-                        float t = dist / pad;
-                        float factor = 0.5f * (1.0f + (float) Math.cos(Math.PI * t));
-                        int a = (int) (maxAlpha * factor);
-                        pixels[y * totalW + x] = (a << 24) | (r << 16) | (g << 8) | b;
-                    }
-                }
+                float nx = (2f * x - (totalW - 1)) / (totalW - 1);
+                float ny = (2f * y - (totalH - 1)) / (totalH - 1);
+                float distance = (float) Math.sqrt(nx * nx + ny * ny);
+                if (distance >= 1f) continue;
+                // Zero slope at the center and outer edge; no dark center is exposed in transit.
+                // Broad bright core with a feathered outer edge. Squaring distance keeps
+                // light visible beyond the artwork without adding a rectangular outline.
+                float factor = 0.5f * (1f + (float) Math.cos(Math.PI * distance * distance));
+                int alpha = Math.round(maxAlpha * factor);
+                pixels[y * totalW + x] = (alpha << 24) | (r << 16) | (g << 8) | b;
             }
         }
         return Bitmap.createBitmap(pixels, totalW, totalH, Bitmap.Config.ARGB_8888);
@@ -123,7 +132,6 @@ public final class GlassHighlight extends View {
 
     /** Move highlight to target card or control. */
     void moveTo(RectF target, float radius, boolean isDock, boolean animate) {
-        isDockTarget = isDock;
         float d = getContext().getResources().getDisplayMetrics().density;
         float lineW = 44f * d;  // ~88px wide
         float lineH = 3f * d;   // 6px height crisp sharp bar
@@ -133,6 +141,7 @@ public final class GlassHighlight extends View {
 
         if (shown && target.equals(to) && radius == toR && isDockTarget == isDock) return;
         anim.cancel();
+        isDockTarget = isDock;
         to.set(target);
         toR = radius;
         toLine.set(newLine);
@@ -155,6 +164,39 @@ public final class GlassHighlight extends View {
         moveTo(target, radius, false, animate);
     }
 
+    void setAmbientColor(int color, boolean animate) {
+        if (color == targetAmbientColor) return;
+        colorAnim.cancel();
+        targetAmbientColor = color;
+        if (!animate || !isAttachedToWindow()) {
+            ambientColor = color;
+            applyAmbientColor();
+            invalidate();
+            return;
+        }
+        // RGB blends between complementary app colors pass through gray/white.
+        // HSV preserves saturation and brightness while following the shortest hue arc.
+        Color.colorToHSV(ambientColor, fromHsv);
+        Color.colorToHSV(color, toHsv);
+        if (fromHsv[1] < 0.01f) fromHsv[0] = toHsv[0];
+        if (toHsv[1] < 0.01f) toHsv[0] = fromHsv[0];
+        colorAnim.start();
+    }
+
+    private void applyAmbientColor() {
+        bitmapPaint.setColorFilter(new PorterDuffColorFilter(ambientColor, PorterDuff.Mode.SRC_IN));
+        lineCore.setColor(ambientColor);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        anim.cancel();
+        colorAnim.cancel();
+        ambientColor = targetAmbientColor;
+        applyAmbientColor();
+        super.onDetachedFromWindow();
+    }
+
     void setRingVisible(boolean on) {
         if (on == visible) return;
         visible = on;
@@ -168,7 +210,7 @@ public final class GlassHighlight extends View {
         float d = getContext().getResources().getDisplayMetrics().density;
 
         if (isDockTarget) {
-            // Ambient Backlight Glow strictly BEHIND the apps (smooth Gaussian falloff, 0 alpha inside card)
+            // Continuous light below the artwork, including between adjacent cards.
             if (glowBitmap != null) {
                 glowDst.set(cur.left - glowPad, cur.top - glowPad, cur.right + glowPad, cur.bottom + glowPad);
                 canvas.drawBitmap(glowBitmap, null, glowDst, bitmapPaint);

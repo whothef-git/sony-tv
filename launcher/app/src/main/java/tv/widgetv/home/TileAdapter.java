@@ -65,7 +65,11 @@ final class TileAdapter extends RecyclerView.Adapter<TileAdapter.Holder> {
     }
 
     static void setLook(View item, boolean on) {
-        item.findViewById(R.id.name).animate().alpha(on ? 1f : 0f).setDuration(220).start();
+        View name = item.findViewById(R.id.name);
+        name.animate().cancel();
+        name.animate().alpha(on ? 1f : 0f)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .setDuration(GlassHighlight.FOCUS_DURATION_MS).start();
     }
 
     static final class Holder extends RecyclerView.ViewHolder {

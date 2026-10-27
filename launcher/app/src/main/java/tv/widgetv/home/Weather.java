@@ -14,6 +14,8 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -48,6 +50,25 @@ final class Weather {
         }
     }
 
+    static final class Hour {
+        final long at;
+        final int temp, code, rain;
+        final boolean day;
+        Hour(long at, int temp, int code, int rain, boolean day) {
+            this.at = at; this.temp = temp; this.code = code; this.rain = rain; this.day = day;
+        }
+    }
+    static final class Day {
+        final long at;
+        final int min, max, code;
+        Day(long at, int min, int max, int code) { this.at = at; this.min = min; this.max = max; this.code = code; }
+    }
+    static final class Forecast {
+        final List<Hour> hours = new ArrayList<>();
+        final List<Day> days = new ArrayList<>();
+        long updated;
+    }
+
     private final SharedPreferences prefs;
     private final ExecutorService net = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -57,6 +78,7 @@ final class Weather {
     private final String url;
     private boolean inFlight;
     private long lastAttempt;
+    private boolean failed;
 
     Weather(Context c) {
         prefs = c.getSharedPreferences("weather", Context.MODE_PRIVATE);
@@ -67,7 +89,8 @@ final class Weather {
         String lngs = coord(cfg.lng) + (cities == 2 ? "," + coord(cfg.secondLng) : "");
         url = "https://api.open-meteo.com/v1/forecast?latitude=" + lats + "&longitude=" + lngs
                 + "&current=temperature_2m,weather_code,is_day"
-                + "&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1"
+                + "&hourly=temperature_2m,weather_code,precipitation_probability,is_day"
+                + "&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days=6&timeformat=unixtime"
                 + "&temperature_unit=" + cfg.weatherUnits;
     }
 
@@ -91,6 +114,41 @@ final class Weather {
         return out;
     }
 
+    boolean lastFetchFailed() { return failed; }
+
+    Forecast forecast() {
+        if (current() == null) return null;
+        try { return parseForecast(new JSONObject(prefs.getString("forecast", "")),
+                System.currentTimeMillis(), prefs.getLong("at", 0)); }
+        catch (Exception ex) { return null; }
+    }
+
+    static Forecast parseForecast(JSONObject json, long now, long updated) throws Exception {
+        Forecast out = new Forecast();
+        out.updated = updated;
+        JSONObject hourly = json.getJSONObject("hourly"), daily = json.getJSONObject("daily");
+        JSONArray ht = hourly.getJSONArray("time"), dt = daily.getJSONArray("time");
+        for (int i = 0; i < ht.length() && out.hours.size() < 6; i++) {
+            long at = ht.getLong(i) * 1000L;
+            if (at < now) continue;
+            int rain = hourly.getJSONArray("precipitation_probability").getInt(i);
+            if (rain < 0 || rain > 100) throw new IllegalArgumentException("Invalid rain probability");
+            out.hours.add(new Hour(at, (int) Math.round(hourly.getJSONArray("temperature_2m").getDouble(i)),
+                    hourly.getJSONArray("weather_code").getInt(i), rain, hourly.getJSONArray("is_day").getInt(i) == 1));
+        }
+        java.time.LocalDate today = java.time.Instant.ofEpochMilli(now).atZone(JakimProvider.MALAYSIA).toLocalDate();
+        for (int i = 0; i < dt.length() && out.days.size() < 5; i++) {
+            long at = dt.getLong(i) * 1000L;
+            if (java.time.Instant.ofEpochMilli(at).atZone(JakimProvider.MALAYSIA).toLocalDate().isBefore(today)) continue;
+            int min = (int) Math.round(daily.getJSONArray("temperature_2m_min").getDouble(i));
+            int max = (int) Math.round(daily.getJSONArray("temperature_2m_max").getDouble(i));
+            if (max < min) throw new IllegalArgumentException("Invalid temperature range");
+            out.days.add(new Day(at, min, max, daily.getJSONArray("weather_code").getInt(i)));
+        }
+        if (out.hours.isEmpty() || out.days.isEmpty()) throw new IllegalArgumentException("No current forecast");
+        return out;
+    }
+
     /** Fetch if the cache is older than 30 minutes (or force); onDone runs on the main thread after a success. */
     void maybeFetch(boolean force, Runnable onDone) {
         if (!enabled) return;
@@ -104,7 +162,8 @@ final class Weather {
             boolean ok = fetch();
             main.post(() -> {
                 inFlight = false;
-                if (ok) onDone.run();
+                failed = !ok;
+                onDone.run();
             });
         });
     }
@@ -128,6 +187,7 @@ final class Weather {
             // Open-Meteo answers one location with an object and several with an array.
             String json = body.toString("UTF-8").trim();
             JSONArray arr = json.startsWith("[") ? new JSONArray(json) : new JSONArray().put(new JSONObject(json));
+            parseForecast(arr.getJSONObject(0), System.currentTimeMillis(), System.currentTimeMillis());
             SharedPreferences.Editor e = prefs.edit().clear();
             StringBuilder log = new StringBuilder("weather: fetch ok");
             for (int i = 0; i < cities; i++) {
@@ -143,6 +203,7 @@ final class Weather {
                 log.append(i == 0 ? " here=" : " second=").append(t).append(" code=").append(code)
                         .append(" is_day=").append(day ? 1 : 0).append(" max=").append(max).append(" min=").append(min);
             }
+            e.putString("forecast", arr.getJSONObject(0).toString());
             e.putString("url", url).putLong("at", System.currentTimeMillis()).apply();
             Log.i(TAG, log.toString());
             return true;
