@@ -46,7 +46,9 @@ public final class ScreenTabs extends View {
             else { fromLeft=indicatorLeft; fromRight=indicatorRight; indicator.start(); }
         }
         setContentDescription("Screens. " + LABELS[selected] + " selected. " +
-                (selected == 1 ? "SHAH ALAM · SGR01. " : "") + "Left or right to switch; down for " + (selected==3?"devices.":"apps."));
+                (selected == 1 ? "SHAH ALAM · SGR01. " : "") +
+                (selected == 2 ? "Read-only forecast. Left or right to switch; Back for Home."
+                        : "Left or right to switch; down for " + (selected==3?"devices.":"apps.")));
         invalidate();
     }
     @Override protected void onDraw(Canvas c) {

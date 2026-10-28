@@ -230,6 +230,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        glass.setRunning(true);
         smartHome.setRunning(true);
         atmosphere.setRunning(tabIdx == 2);
         IntentFilter timeFilter = new IntentFilter(Intent.ACTION_TIME_TICK);
@@ -244,6 +245,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        glass.setRunning(false);
         smartHome.setRunning(false);
         atmosphere.setRunning(false);
         unregisterReceiver(timeReceiver);
@@ -289,11 +291,12 @@ public class MainActivity extends Activity {
         boolean changed = previous != index;
         tabIdx = index;
         boolean smart = index == 3;
+        boolean hideApps = smart || index == 2;
         // INVISIBLE retains all original bounds so switching pages cannot move the Home header.
         awayRow.setVisibility(smart || !cfg.secondEnabled ? View.INVISIBLE : View.VISIBLE);
-        findViewById(R.id.dock_band).setVisibility(smart ? View.INVISIBLE : View.VISIBLE);
-        gridList.setVisibility(smart ? View.INVISIBLE : View.VISIBLE);
-        findViewById(R.id.apps_heading).setVisibility(smart ? View.INVISIBLE : View.VISIBLE);
+        findViewById(R.id.dock_band).setVisibility(hideApps ? View.INVISIBLE : View.VISIBLE);
+        gridList.setVisibility(hideApps ? View.INVISIBLE : View.VISIBLE);
+        findViewById(R.id.apps_heading).setVisibility(hideApps ? View.INVISIBLE : View.VISIBLE);
         page.setDescendantFocusability(smart ? ViewGroup.FOCUS_AFTER_DESCENDANTS : ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         smartHome.setScreenActive(smart);
         screenTabs.setState(index, zone == Zone.TABS);
@@ -451,6 +454,7 @@ public class MainActivity extends Activity {
                 else if (right && tabIdx < ScreenTabs.LABELS.length - 1) focus(Zone.TABS, tabIdx + 1, true);
                 else if (up) focus(Zone.TOP, pillIdx, true);
                 else if (dn && tabIdx == 3) focus(Zone.SMART, 0, true);
+                else if (dn && tabIdx == 2) break; // Weather uses the dock area; never focus hidden apps.
                 else if (dn && dockN > 0) focus(Zone.DOCK, clamp(dockIdx, dockN), true);
                 else if (dn && gridN > 0) focus(Zone.GRID, clamp(gridIdx, gridN), true);
                 break;
@@ -611,7 +615,7 @@ public class MainActivity extends Activity {
             prayerScreen.setLayoutParams(prayerLp);
         }
         FrameLayout.LayoutParams forecastLp = (FrameLayout.LayoutParams) forecastView.getLayoutParams();
-        int available = Math.max(dp(160), findViewById(R.id.dock_band).getTop() - screenTop - dp(22));
+        int available = Math.max(dp(250), firstScreenH - screenTop - dp(18));
         if (forecastLp.topMargin != screenTop || forecastLp.height != available) {
             forecastLp.topMargin = screenTop;
             forecastLp.height = available;

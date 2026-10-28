@@ -9,13 +9,14 @@ import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 
 /**
  * Ambient Backlight Glow behind apps & Light-Up Underline below app name:
- * - A continuous soft backlight, drawn below the opaque app artwork.
+ * - Layered, slowly drifting ambient spill below the opaque app artwork.
  * - No transparent rectangular cutout: the light stays filled while crossing gaps between apps.
  * - A crisp underline below the active app name.
  */
@@ -45,6 +46,18 @@ public final class GlassHighlight extends View {
     private Bitmap glowBitmap = null;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private float glowPad = 0f;
+    private boolean foreground, ambientFramePosted;
+    private final long motionEpoch = SystemClock.uptimeMillis();
+    private double ambientSeconds;
+    private final Runnable ambientFrame = new Runnable() {
+        @Override public void run() {
+            ambientFramePosted = false;
+            if (!shouldAnimateAmbient()) return;
+            ambientSeconds = (SystemClock.uptimeMillis() - motionEpoch) / 1000.0;
+            invalidate();
+            updateAmbientFrames();
+        }
+    };
 
     // Sharp Underline Paint (No shadow, no glow)
     private final Paint lineCore = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -139,7 +152,10 @@ public final class GlassHighlight extends View {
         float lineY = target.bottom + 34f * d; // Directly beneath app name text
         RectF newLine = new RectF(lineX, lineY, lineX + lineW, lineY + lineH);
 
-        if (shown && target.equals(to) && radius == toR && isDockTarget == isDock) return;
+        if (shown && target.equals(to) && radius == toR && isDockTarget == isDock) {
+            updateAmbientFrames();
+            return;
+        }
         anim.cancel();
         isDockTarget = isDock;
         to.set(target);
@@ -151,6 +167,7 @@ public final class GlassHighlight extends View {
             curR = radius;
             curLine.set(newLine);
             shown = true;
+            updateAmbientFrames();
             invalidate();
             return;
         }
@@ -158,6 +175,7 @@ public final class GlassHighlight extends View {
         fromR = curR;
         fromLine.set(curLine);
         anim.start();
+        updateAmbientFrames();
     }
 
     void moveTo(RectF target, float radius, boolean animate) {
@@ -188,8 +206,51 @@ public final class GlassHighlight extends View {
         lineCore.setColor(ambientColor);
     }
 
+    /** Only app focus in a visible, foreground launcher needs an ambient frame loop. */
+    void setRunning(boolean on) {
+        foreground = on;
+        updateAmbientFrames();
+    }
+
+    private boolean shouldAnimateAmbient() {
+        return foreground && shown && visible && (isDockTarget || curR <= 0.1f)
+                && isAttachedToWindow() && isShown() && getWindowVisibility() == VISIBLE
+                && ValueAnimator.areAnimatorsEnabled();
+    }
+
+    private void updateAmbientFrames() {
+        // View can call visibility callbacks from its superclass constructor.
+        if (ambientFrame == null) return;
+        if (shouldAnimateAmbient()) {
+            if (!ambientFramePosted) {
+                ambientFramePosted = true;
+                postDelayed(ambientFrame, 33); // Slow light needs at most 30 fps; focus travel stays at vsync.
+            }
+        } else {
+            removeCallbacks(ambientFrame);
+            ambientFramePosted = false;
+        }
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        updateAmbientFrames();
+    }
+
+    @Override protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        updateAmbientFrames();
+    }
+
+    @Override protected void onVisibilityChanged(View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        updateAmbientFrames();
+    }
+
     @Override
     protected void onDetachedFromWindow() {
+        removeCallbacks(ambientFrame);
+        ambientFramePosted = false;
         anim.cancel();
         colorAnim.cancel();
         ambientColor = targetAmbientColor;
@@ -200,6 +261,7 @@ public final class GlassHighlight extends View {
     void setRingVisible(boolean on) {
         if (on == visible) return;
         visible = on;
+        updateAmbientFrames();
         animate().cancel();
         animate().alpha(on ? 1f : 0f).setDuration(160).start();
     }
@@ -210,29 +272,48 @@ public final class GlassHighlight extends View {
         float d = getContext().getResources().getDisplayMetrics().density;
 
         if (isDockTarget) {
-            // Continuous light below the artwork, including between adjacent cards.
-            if (glowBitmap != null) {
-                glowDst.set(cur.left - glowPad, cur.top - glowPad, cur.right + glowPad, cur.bottom + glowPad);
-                canvas.drawBitmap(glowBitmap, null, glowDst, bitmapPaint);
-            }
+            drawAmbientSpill(canvas, 1f);
 
             // Sharp rectangular underline directly below app name (no shadow, no glow)
             if (curLine.width() > 0) {
                 canvas.drawRect(curLine, lineCore);
             }
         } else if (curR <= 0.1f) {
-            // Grid cards: subtle ambient glow
-            if (glowBitmap != null) {
-                glowDst.set(cur.left - glowPad * 0.7f, cur.top - glowPad * 0.7f,
-                            cur.right + glowPad * 0.7f, cur.bottom + glowPad * 0.7f);
-                canvas.drawBitmap(glowBitmap, null, glowDst, bitmapPaint);
-            }
+            drawAmbientSpill(canvas, .72f);
         } else {
             // Timeline: rounded gold ring
             edge.set(cur);
             edge.inset(-d, -d);
             canvas.drawRoundRect(edge, curR + d, curR + d, goldRing);
         }
+    }
+
+    private void drawAmbientSpill(Canvas canvas, float strength) {
+        if (glowBitmap == null || cur.isEmpty()) return;
+        double phase = ambientSeconds * Math.PI * 2 / 9.5;
+        float drift = (float) Math.sin(phase);
+        float sway = (float) Math.sin(phase * .73 + 1.1);
+        float breathe = (float) Math.sin(ambientSeconds * Math.PI * 2 / 7.4);
+        float pad = glowPad * strength;
+        // A wide, low-intensity wash makes the light feel reflected by the background.
+        spill(canvas, cur.centerX() + pad * .10f * sway, cur.centerY() + pad * .04f * drift,
+                cur.width() * .5f + pad * 1.5f, cur.height() * .5f + pad * 1.05f, 82);
+        // Two offset pools flow in opposite directions instead of scaling one static oval.
+        spill(canvas, cur.centerX() + cur.width() * .24f * drift,
+                cur.top + cur.height() * .12f + pad * .06f * sway,
+                cur.width() * .40f + pad * .55f, cur.height() * .25f + pad * .70f,
+                Math.round(118 + 9 * breathe));
+        spill(canvas, cur.centerX() - cur.width() * .20f * sway,
+                cur.bottom - cur.height() * .08f,
+                cur.width() * .36f + pad * .64f, cur.height() * .24f + pad * .64f,
+                Math.round(102 - 7 * breathe));
+        bitmapPaint.setAlpha(255);
+    }
+
+    private void spill(Canvas canvas, float x, float y, float rx, float ry, int alpha) {
+        glowDst.set(x - rx, y - ry, x + rx, y + ry);
+        bitmapPaint.setAlpha(alpha);
+        canvas.drawBitmap(glowBitmap, null, glowDst, bitmapPaint);
     }
 
     private static float lerp(float a, float b, float t) {

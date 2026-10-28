@@ -35,33 +35,46 @@ final class Weather {
     /** One city's reading, in the configured units. */
     static final class City {
         final int temp, code;
+        final int apparentTemp, humidity, windSpeed;
         final boolean day;
         /** Today's high/low in that city's own local day. */
         final int max, min;
         final boolean hasRange;
 
         City(int temp, int code, boolean day, int max, int min, boolean hasRange) {
+            this(temp, code, day, max, min, hasRange, -1, -1, -1);
+        }
+
+        City(int temp, int code, boolean day, int max, int min, boolean hasRange,
+                int apparentTemp, int humidity, int windSpeed) {
             this.temp = temp;
             this.code = code;
             this.day = day;
             this.max = max;
             this.min = min;
             this.hasRange = hasRange;
+            this.apparentTemp = apparentTemp;
+            this.humidity = humidity;
+            this.windSpeed = windSpeed;
         }
     }
 
     static final class Hour {
         final long at;
-        final int temp, code, rain;
+        final int temp, code, rain, humidity, apparentTemp, windSpeed;
         final boolean day;
-        Hour(long at, int temp, int code, int rain, boolean day) {
+        Hour(long at, int temp, int code, int rain, boolean day, int humidity, int apparentTemp, int windSpeed) {
             this.at = at; this.temp = temp; this.code = code; this.rain = rain; this.day = day;
+            this.humidity = humidity;
+            this.apparentTemp = apparentTemp; this.windSpeed = windSpeed;
         }
     }
     static final class Day {
         final long at;
-        final int min, max, code;
-        Day(long at, int min, int max, int code) { this.at = at; this.min = min; this.max = max; this.code = code; }
+        final int min, max, code, rainMax;
+        Day(long at, int min, int max, int code, int rainMax) {
+            this.at = at; this.min = min; this.max = max; this.code = code; this.rainMax = rainMax;
+        }
     }
     static final class Forecast {
         final List<Hour> hours = new ArrayList<>();
@@ -88,9 +101,9 @@ final class Weather {
         String lats = coord(cfg.lat) + (cities == 2 ? "," + coord(cfg.secondLat) : "");
         String lngs = coord(cfg.lng) + (cities == 2 ? "," + coord(cfg.secondLng) : "");
         url = "https://api.open-meteo.com/v1/forecast?latitude=" + lats + "&longitude=" + lngs
-                + "&current=temperature_2m,weather_code,is_day"
-                + "&hourly=temperature_2m,weather_code,precipitation_probability,is_day"
-                + "&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days=6&timeformat=unixtime"
+                + "&current=temperature_2m,weather_code,is_day,apparent_temperature,relative_humidity_2m,wind_speed_10m"
+                + "&hourly=temperature_2m,weather_code,precipitation_probability,is_day,relative_humidity_2m,apparent_temperature,wind_speed_10m"
+                + "&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto&forecast_days=6&timeformat=unixtime&wind_speed_unit=kmh"
                 + "&temperature_unit=" + cfg.weatherUnits;
     }
 
@@ -109,7 +122,8 @@ final class Weather {
         City[] out = new City[cities];
         for (int i = 0; i < cities; i++) {
             out[i] = new City(prefs.getInt("t" + i, 0), prefs.getInt("c" + i, 0), prefs.getBoolean("d" + i, true),
-                    prefs.getInt("x" + i, 0), prefs.getInt("n" + i, 0), prefs.contains("x" + i));
+                    prefs.getInt("x" + i, 0), prefs.getInt("n" + i, 0), prefs.contains("x" + i),
+                    prefs.getInt("a" + i, -1), prefs.getInt("h" + i, -1), prefs.getInt("w" + i, -1));
         }
         return out;
     }
@@ -128,13 +142,15 @@ final class Weather {
         out.updated = updated;
         JSONObject hourly = json.getJSONObject("hourly"), daily = json.getJSONObject("daily");
         JSONArray ht = hourly.getJSONArray("time"), dt = daily.getJSONArray("time");
-        for (int i = 0; i < ht.length() && out.hours.size() < 6; i++) {
+        for (int i = 0; i < ht.length() && out.hours.size() < 8; i++) {
             long at = ht.getLong(i) * 1000L;
             if (at < now) continue;
             int rain = hourly.getJSONArray("precipitation_probability").getInt(i);
             if (rain < 0 || rain > 100) throw new IllegalArgumentException("Invalid rain probability");
             out.hours.add(new Hour(at, (int) Math.round(hourly.getJSONArray("temperature_2m").getDouble(i)),
-                    hourly.getJSONArray("weather_code").getInt(i), rain, hourly.getJSONArray("is_day").getInt(i) == 1));
+                    hourly.getJSONArray("weather_code").getInt(i), rain, hourly.getJSONArray("is_day").getInt(i) == 1,
+                    optionalPercent(hourly, "relative_humidity_2m", i),
+                    optionalRounded(hourly, "apparent_temperature", i), optionalRounded(hourly, "wind_speed_10m", i)));
         }
         java.time.LocalDate today = java.time.Instant.ofEpochMilli(now).atZone(JakimProvider.MALAYSIA).toLocalDate();
         for (int i = 0; i < dt.length() && out.days.size() < 5; i++) {
@@ -143,10 +159,24 @@ final class Weather {
             int min = (int) Math.round(daily.getJSONArray("temperature_2m_min").getDouble(i));
             int max = (int) Math.round(daily.getJSONArray("temperature_2m_max").getDouble(i));
             if (max < min) throw new IllegalArgumentException("Invalid temperature range");
-            out.days.add(new Day(at, min, max, daily.getJSONArray("weather_code").getInt(i)));
+            out.days.add(new Day(at, min, max, daily.getJSONArray("weather_code").getInt(i),
+                    optionalPercent(daily, "precipitation_probability_max", i)));
         }
         if (out.hours.isEmpty() || out.days.isEmpty()) throw new IllegalArgumentException("No current forecast");
         return out;
+    }
+
+    private static int optionalPercent(JSONObject object, String key, int index) {
+        JSONArray values = object.optJSONArray(key);
+        if (values == null || values.isNull(index)) return -1;
+        int value = values.optInt(index, -1);
+        return value >= 0 && value <= 100 ? value : -1;
+    }
+
+    private static int optionalRounded(JSONObject object, String key, int index) {
+        JSONArray values = object.optJSONArray(key);
+        double value = values == null ? Double.NaN : values.optDouble(index, Double.NaN);
+        return Double.isFinite(value) ? (int) Math.round(value) : Integer.MIN_VALUE;
     }
 
     /** Fetch if the cache is older than 30 minutes (or force); onDone runs on the main thread after a success. */
@@ -195,11 +225,16 @@ final class Weather {
                 double t = cur.getDouble("temperature_2m");
                 int code = cur.getInt("weather_code");
                 boolean day = cur.getInt("is_day") == 1;
+                int apparent = (int) Math.round(cur.getDouble("apparent_temperature"));
+                int humidity = cur.getInt("relative_humidity_2m");
+                int wind = (int) Math.round(cur.getDouble("wind_speed_10m"));
+                if (humidity < 0 || humidity > 100 || wind < 0) throw new IllegalArgumentException("Invalid weather metrics");
                 JSONObject daily = arr.getJSONObject(i).getJSONObject("daily");
                 double max = daily.getJSONArray("temperature_2m_max").getDouble(0);
                 double min = daily.getJSONArray("temperature_2m_min").getDouble(0);
                 e.putInt("t" + i, (int) Math.round(t)).putInt("c" + i, code).putBoolean("d" + i, day)
-                        .putInt("x" + i, (int) Math.round(max)).putInt("n" + i, (int) Math.round(min));
+                        .putInt("x" + i, (int) Math.round(max)).putInt("n" + i, (int) Math.round(min))
+                        .putInt("a" + i, apparent).putInt("h" + i, humidity).putInt("w" + i, wind);
                 log.append(i == 0 ? " here=" : " second=").append(t).append(" code=").append(code)
                         .append(" is_day=").append(day ? 1 : 0).append(" max=").append(max).append(" min=").append(min);
             }
