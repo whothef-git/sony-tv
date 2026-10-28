@@ -37,12 +37,13 @@ public final class SkyView extends View {
     private static final int NIGHT = 5;
     private static final long FADE_MS = 20 * 60_000L;
     private static final float PATTERN_ALPHA = 0.13f, PATTERN_FADE_END = 0.58f;
-    /** Scrim stops (fraction of height → lapis-900 alpha); keeps header text ≥ 4.5:1 on every sky. */
-    private static final float[] SCRIM_POS = {0f, 0.30f, 0.50f, 0.68f};
-    private static final float[] SCRIM_ALPHA = {0.90f, 0.82f, 0.66f, 0f};
+    /** Scrim stops (fraction of height → lapis-900 alpha); keeps header text ≥ 4.5:1 on every sky.
+     *  Extended to 90 % so the golden / sunset sky colour cannot bleed as a harsh half-screen band. */
+    private static final float[] SCRIM_POS   = {0f,   0.30f, 0.50f, 0.70f, 0.90f};
+    private static final float[] SCRIM_ALPHA = {0.90f, 0.82f, 0.66f, 0.40f, 0f  };
 
     private final Paint sky = new Paint(), stars = new Paint(Paint.ANTI_ALIAS_FLAG), pattern = new Paint(),
-            scrim = new Paint(), dim = new Paint();
+            scrim = new Paint(), dim = new Paint(), vignette = new Paint();
     private final float[] starXY = new float[40 * 3];
     private int[] colors = SKY[NIGHT].clone();
     private float nightWeight = 1f, dimFraction;
@@ -131,6 +132,10 @@ public final class SkyView extends View {
             scrimPos[i] = SCRIM_POS[i];
         }
         scrim.setShader(new LinearGradient(0, 0, 0, h, scrimColors, scrimPos, Shader.TileMode.CLAMP));
+        // Bottom vignette: transparent at 55 % height → lapis-900 at ~80 % opacity at the very bottom.
+        // Anchors the dock/grid region in deep lapis regardless of the sky period colour.
+        vignette.setShader(new LinearGradient(0, h * 0.55f, 0, h,
+                0x00000000, Lapis.alpha(Lapis.LAPIS_900, 0.80f), Shader.TileMode.CLAMP));
         if (tile != null) {
             // Pattern masked by a top-down alpha ramp (DST_IN keeps the tile where the ramp is opaque).
             Shader tiles = new BitmapShader(tile, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
@@ -152,6 +157,8 @@ public final class SkyView extends View {
             }
         }
         c.drawRect(0, 0, w, h, scrim);
+        // Bottom vignette: anchors the lower half in deep lapis so no sky period bleeds as a harsh band.
+        c.drawRect(0, h * 0.55f, w, h, vignette);
         // Pattern above the scrim, so it is at full strength at the top edge and fades out by ~58%.
         if (pattern.getShader() != null) c.drawRect(0, 0, w, h * PATTERN_FADE_END, pattern);
         if (dimFraction > 0f) {
