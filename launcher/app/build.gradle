@@ -10,12 +10,24 @@ android {
         applicationId 'tv.widgetv.home'
         minSdk 28
         targetSdk 34
-        versionCode 7
-        versionName '1.6'
+        versionCode 11
+        versionName '2.0'
+        testInstrumentationRunner 'tv.widgetv.home.SmartHomeIntegrationChecks'
     }
 
     buildFeatures {
         buildConfig true // BuildConfig.DEBUG guards the adb preview hooks
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Local TV trial: retain the existing signing identity for an in-place update.
+            // Replace with a private release signing configuration before distribution.
+            signingConfig signingConfigs.debug
+        }
     }
 
     compileOptions {

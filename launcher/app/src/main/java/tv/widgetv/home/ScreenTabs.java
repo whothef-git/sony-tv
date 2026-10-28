@@ -10,7 +10,7 @@ import android.view.animation.DecelerateInterpolator;
 
 /** MainActivity owns D-pad navigation; changing focus changes the page. */
 public final class ScreenTabs extends View {
-    static final String[] LABELS = {"Home", "Prayer Time", "Weather"};
+    static final String[] LABELS = {"Home", "Prayer Time", "Weather", "Smart Home"};
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG), line = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final float d;
     private int selected;
@@ -46,13 +46,11 @@ public final class ScreenTabs extends View {
             else { fromLeft=indicatorLeft; fromRight=indicatorRight; indicator.start(); }
         }
         setContentDescription("Screens. " + LABELS[selected] + " selected. " +
-                (selected == 1 ? "SHAH ALAM · SGR01. " : "") + "Left or right to switch; down for apps.");
+                (selected == 1 ? "SHAH ALAM · SGR01. " : "") + "Left or right to switch; down for " + (selected==3?"devices.":"apps."));
         invalidate();
     }
     @Override protected void onDraw(Canvas c) {
         float x = 0;
-        line.setColor(0x303A4B64);
-        c.drawRect(0, getHeight() - d, getWidth(), getHeight(), line);
         for (int i = 0; i < LABELS.length; i++) {
             float width = text.measureText(LABELS[i]);
             text.setColor(i == selected ? Lapis.PLASTER_100 : Lapis.MIST_400);

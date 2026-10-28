@@ -29,6 +29,7 @@
     </queries>
 
     <application
+        android:networkSecurityConfig="@xml/local_network_security"
         android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@drawable/icon"

@@ -1,6 +1,47 @@
 # WidgeTV
 
-## Local TV build 1.6
+## Local TV build 2.0 — direct Smart Home integration
+
+Smart Home now defaults to real local-device mode, with a persistent registry and encrypted TP-Link
+account setup on the TV. Open **Manage Devices** using MENU, or hold OK on the Smart Home tab.
+Scan or add a private LAN IP manually, enter TP-Link credentials privately, rename/assign rooms,
+reorder, refresh, or remove devices. The existing UI and the other three screens are retained.
+
+Direct Java transports cover P110 KLAP v1/v2 and legacy AES login variants, plus KP303 legacy IOT
+outlets using device-reported identifiers. Commands are pending until device response and state
+confirmation. This is a community-protocol port; compatibility and controls require real hardware
+verification. Unsupported firmware shows an error, with no automatic demo fallback.
+
+GO DAIKIN controls remain disabled until controller/API compatibility is verified. Five setup entries
+remain in Manage Devices. Account login alone does not identify the controller's supported API.
+
+See [protocols, security and limitations](docs/SMART-HOME-PROTOCOLS.md). No external backend or
+smart-device cloud login is used. Developer demo mode remains an explicit, separate choice in Manage
+Devices. Version 1.9 is preserved locally for rollback.
+
+### Preserved Phase 1 demo interface
+
+The fourth tab, Smart Home, is an isolated **DEMO MODE** interface: five Daikin air conditioners,
+two Tapo P110 plugs and one Kasa KP303 power strip. No smart-device discovery, authentication or
+network commands are implemented. Names and simulated readings come from an in-memory repository
+and reset when the launcher process restarts.
+
+Use the D-pad to move through the four-column device grid; UP from the first row returns to the
+tabs. OK opens a floating control dialog, and BACK closes it and restores device focus. Daikin
+power, temperature, mode and fan speed, Tapo power, and all three Kasa outlets work locally.
+Online devices remain visible even when power is OFF. Lost connections show amber Connecting
+for 45 seconds, then hide; reconnection restores preferred ordering. Focus recovers to the nearest
+remaining device, and an empty-state message appears when all are hidden.
+
+For developer simulation only, press the remote MENU key while Smart Home is selected
+(`adb shell input keyevent 82` also works). Choose a device to simulate connection/power/settings,
+or use All devices offline, All devices online, or Reset demo. These controls do not send network
+requests. This hidden developer menu is intentionally available in the local Phase 1 demo build.
+
+Smart Home hides the Saudi block and app launcher only on that screen. The main clock, local
+weather, Gregorian/Malay Hijri dates, system icons, background and existing tab positions remain.
+
+### Existing launcher features and optimized build
 
 This customized build has Home, Prayer Time and Weather tabs, switched with the remote's D-pad.
 Home keeps the clocks, compact Gregorian/Malay Hijri dates, weather summaries and app dock.
@@ -9,6 +50,7 @@ Weather uses the existing Open-Meteo feed for six hourly and five daily forecast
 panels, and condition-driven background effects. Rain effects depend on current conditions,
 not forecast precipitation probability. The weather and secondary UI share the Outfit font.
 The existing ambient app focus effect is retained; navigation tabs use a neutral sliding underline.
+Only the active tab is underlined; there is no full-width divider below the navigation.
 The app glow fades in place when moving between the dock and screen tabs, avoiding a rectangular flash.
 The local weather sits close to the main clock. Saudi time is right-aligned with current weather
 beside its high/low range below. The Saudi flag is approximately 21.3 × 16 scaled units.
@@ -25,6 +67,14 @@ calculated prayer times.
 
 Build the Android app from `launcher/` with JDK 17 and Android SDK 34 using the Gradle wrapper.
 On Windows, use `gradlew.bat assembleDebug`.
+For the optimized local TV build, use `gradlew.bat assembleRelease`. Release builds enable R8
+and resource shrinking, and disable debug preview hooks. The current local release variant uses
+the existing debug signing identity for compatible in-place TV updates; configure private release
+signing before external distribution. Keep the R8 mapping file with each build for crash diagnostics.
+
+The optimized version 1.8 APK is 1,036,377 bytes, compared with version 1.7 at 4,841,421 bytes
+(78.6% smaller), with all five bundled font files preserved. All 16 on-TV navigation checks passed;
+Home, Prayer Time and Weather were visually checked, and YouTube launched successfully from the dock.
 
 The upstream documentation below describes the original project and its original setup flow.
 
