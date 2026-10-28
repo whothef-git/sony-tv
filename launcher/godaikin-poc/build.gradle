@@ -1,0 +1,26 @@
+plugins {
+    id 'com.android.application' version '8.5.2'
+}
+
+android {
+    namespace 'tv.widgetv.home.godaikin'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'tv.widgetv.godaikinpoc'
+        minSdk 28
+        targetSdk 34
+        versionCode 3
+        versionName '0.3-control-validation'
+        testInstrumentationRunner 'tv.widgetv.home.godaikin.CloudMockChecks'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets { androidTest.java.srcDirs += 'checks' }
+}
+
+// Deliberately no production/release artifact before real cloud validation.
+androidComponents {
+    beforeVariants(selector().withBuildType('release')) { variant -> variant.enable = false }
+}

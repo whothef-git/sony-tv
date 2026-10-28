@@ -13,7 +13,7 @@ final class SmartDevice {
     String mode = "Cool", fanSpeed = "Auto";
     double watts, dailyKwh;
     final PowerState[] outlets = {PowerState.ON, PowerState.OFF, PowerState.ON};
-    boolean demo, pending, disabled;
+    boolean demo, pending, disabled, daikinWritable;
     String room="", ip="", hardwareId="", mac="", protocol="AUTO", error="";
     long lastSeen;
     final String[] outletIds={"","",""};
@@ -29,12 +29,14 @@ final class SmartDevice {
         d.watts=watts; d.dailyKwh=dailyKwh;
         System.arraycopy(outlets,0,d.outlets,0,3);
         System.arraycopy(outletIds,0,d.outletIds,0,3);System.arraycopy(outletNames,0,d.outletNames,0,3);
-        d.demo=demo;d.pending=pending;d.disabled=disabled;d.room=room;d.ip=ip;d.hardwareId=hardwareId;
+        d.demo=demo;d.pending=pending;d.disabled=disabled;d.daikinWritable=daikinWritable;d.room=room;d.ip=ip;d.hardwareId=hardwareId;
         d.mac=mac;d.protocol=protocol;d.error=error;d.lastSeen=lastSeen;
         return d;
     }
     String brand() {
         return type==DeviceType.DAIKIN ? "Daikin" : type==DeviceType.TAPO_P110 ? "Tapo P110" : "Kasa KP303";
     }
-    String connectionLabel() { return disabled?"Setup required":connection==ConnectionState.ONLINE ? "Online" : demo||connection==ConnectionState.CONNECTING?"Connecting":"Offline"; }
+    boolean cloud(){return type==DeviceType.DAIKIN&&"GO_DAIKIN".equals(protocol);}
+    boolean cached(){return cloud()&&(lastSeen==0||System.currentTimeMillis()-lastSeen>120000);}
+    String connectionLabel() { return disabled?"Setup required":cloud()&&connection==ConnectionState.ONLINE&&cached()?"Cloud cached":connection==ConnectionState.ONLINE ? "Online" : demo||connection==ConnectionState.CONNECTING?"Connecting":"Offline"; }
 }

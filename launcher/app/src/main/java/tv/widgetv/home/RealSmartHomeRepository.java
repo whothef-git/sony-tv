@@ -38,6 +38,9 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
     private volatile boolean active,closed,scanning;
     private volatile long generation;
     private ScheduledFuture<?> polling,rediscovery;
+    private tv.widgetv.home.godaikin.LauncherDaikinClient daikin;
+    private boolean cloudBusy,cloudLoginRejected;
+    private long cloudLastAttempt,cloudEpoch;
     RealSmartHomeRepository(Context c){this(c,null,null,SystemClock::elapsedRealtime);}
     RealSmartHomeRepository(Context c,DriverFactory factory,Discovery discovery,java.util.function.LongSupplier elapsed){context=c.getApplicationContext();registry=new DeviceRegistry(c);credentials=new SmartCredentialStore(c);this.elapsed=elapsed;
         this.factory=factory==null?(d,secret)->new TpLinkDeviceClient(context,d,secret):factory;this.discovery=discovery==null?new DeviceDiscoveryManager(context)::discover:discovery;
@@ -49,10 +52,11 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
     }
     public boolean isDemo(){return false;}
     boolean hasAccount(){return credentials.hasAccount();}
+    boolean hasDaikinAccount(){return credentials.hasDaikin();}
     public String statusText(){return status;}
     public List<SmartDevice> all(){List<SmartDevice> list=new ArrayList<>();for(SmartDevice d:snapshot)list.add(d.copy());return list;}
     public SmartDevice find(String id){for(SmartDevice d:snapshot)if(d.id.equals(id))return d.copy();return null;}
-    public List<SmartDevice> visible(){List<SmartDevice> out=new ArrayList<>();long now=elapsed.getAsLong();for(SmartDevice d:snapshot)if(!d.disabled&&(d.connection==ConnectionState.ONLINE||d.disconnectedAt>=0&&now-d.disconnectedAt<OFFLINE_GRACE_MS))out.add(d.copy());return out;}
+    public List<SmartDevice> visible(){List<SmartDevice> out=new ArrayList<>();long now=elapsed.getAsLong();for(SmartDevice d:snapshot)if(!d.disabled&&(d.cloud()||d.connection==ConnectionState.ONLINE||d.disconnectedAt>=0&&now-d.disconnectedAt<OFFLINE_GRACE_MS))out.add(d.copy());return out;}
     public long nextVisibilityDelay(){long next=Long.MAX_VALUE,now=elapsed.getAsLong();for(SmartDevice d:snapshot)if(!d.disabled&&d.connection!=ConnectionState.ONLINE&&d.disconnectedAt>=0){long delay=OFFLINE_GRACE_MS-(now-d.disconnectedAt);if(delay>0)next=Math.min(next,delay);}return next==Long.MAX_VALUE?-1:next;}
     public void addListener(Runnable l){if(!listeners.contains(l))listeners.add(l);}
     public void removeListener(Runnable l){listeners.remove(l);}
@@ -75,13 +79,13 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
                     }
                     if(existing.connection!=ConnectionState.ONLINE&&existing.disconnectedAt<0)existing.disconnectedAt=elapsed.getAsLong();
                 }
-                status="Local mode · "+result.size()+" compatible discovery responses · Daikin setup required";save();pollAll();
+                status="LAN devices · "+result.size()+" discovery responses · GO DAIKIN "+(credentials.hasDaikin()?"cloud account saved":"setup in Manage Devices");save();pollAll();
             });
         });
     }
     void requestScan(){if(!closed)worker.execute(this::scanNow);}
-    private void pollAll(){if(!active||closed)return;for(SmartDevice d:new ArrayList<>(registry.devices))if(!d.disabled&&!d.ip.isEmpty()&&!commands.contains(d.id))launch(d.id,null);}
-    void refreshDevice(String id){if(!closed)worker.execute(()->{clients.remove(id);launch(id,null);});}
+    private void pollAll(){if(!active||closed)return;for(SmartDevice d:new ArrayList<>(registry.devices))if(d.type!=DeviceType.DAIKIN&&!d.disabled&&!d.ip.isEmpty()&&!commands.contains(d.id))launch(d.id,null);pollDaikin();}
+    void refreshDevice(String id){if(!closed)worker.execute(()->{SmartDevice d=registry.find(id);if(d!=null&&d.type==DeviceType.DAIKIN){cloudLastAttempt=0;cloudLoginRejected=false;pollDaikin();}else{clients.remove(id);launch(id,null);}});}
     private interface Command{SmartDevice run(SmartDeviceDriver client,SmartDevice device)throws Exception;}
     private void launch(String id,Command command){
         SmartDevice current=registry.find(id);if(closed||current==null||current.disabled){commands.remove(id);return;}
@@ -105,12 +109,76 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
             d.pending=true;d.error="";publish();launch(id,command);
         });
     }
-    public void togglePower(String id){SmartDevice d=find(id);if(d==null||d.type!=DeviceType.TAPO_P110||d.power==PowerState.UNKNOWN)return;boolean on=d.power!=PowerState.ON;command(id,(client,input)->client.setPower(input,on));}
+    public void togglePower(String id){SmartDevice d=find(id);if(d!=null&&d.type==DeviceType.DAIKIN){if(d.power!=PowerState.UNKNOWN)daikinCommand(id,"Set_OnOff",d.power==PowerState.ON?0:1,false);return;}if(d==null||d.type!=DeviceType.TAPO_P110||d.power==PowerState.UNKNOWN)return;boolean on=d.power!=PowerState.ON;command(id,(client,input)->client.setPower(input,on));}
     public void toggleOutlet(String id,int index){SmartDevice d=find(id);if(d==null||d.type!=DeviceType.KASA_KP303||index<0||index>2||d.outlets[index]==PowerState.UNKNOWN)return;boolean on=d.outlets[index]!=PowerState.ON;command(id,(client,input)->client.setOutlet(input,index,on));}
-    public void adjustTemperature(String id,int delta){unsupported(id);}
-    public void setMode(String id,String mode){unsupported(id);}
-    public void setFanSpeed(String id,String speed){unsupported(id);}
+    public void adjustTemperature(String id,int delta){if(Math.abs(delta)==1)daikinCommand(id,"Set_Temp",delta,true);}
+    public void setMode(String id,String mode){int value=mode.equals("Cool")?1:mode.equals("Fan")?2:mode.equals("Dry")?4:-1;if(value>0)daikinCommand(id,"Set_Mode",value,false);}
+    public void setFanSpeed(String id,String speed){int value=speed.equals("Low")?2:speed.equals("Medium")?4:speed.equals("High")?8:speed.equals("Auto")?128:-1;if(value>0)daikinCommand(id,"Set_Fan",value,false);}
     private void unsupported(String id){if(!closed)worker.execute(()->{SmartDevice d=registry.find(id);if(d!=null){d.error="GO DAIKIN controls are disabled until controller/API compatibility is verified.";publish();}});}
+    private static String normalized(String value){return value.replaceAll("(?i)\\s+AC$","").trim().toLowerCase(java.util.Locale.ROOT);}
+    private void applyDaikin(tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus state){
+        String hash=tv.widgetv.home.godaikin.LauncherDaikinClient.identity(state.id);SmartDevice d=null;
+        for(SmartDevice item:registry.devices)if(item.type==DeviceType.DAIKIN&&item.hardwareId.equals(hash)){d=item;break;}
+        if(d==null)for(SmartDevice item:registry.devices)if(item.type==DeviceType.DAIKIN&&item.hardwareId.isEmpty()&&normalized(item.name).equals(normalized(state.name))){d=item;break;}
+        if(d==null){d=DeviceRegistry.blank(DeviceType.DAIKIN,state.name,registry.devices.size());registry.devices.add(d);}
+        d.hardwareId=hash;d.protocol="GO_DAIKIN";d.disabled=false;d.daikinWritable=daikin!=null&&daikin.writable(state);d.ip=state.ip;
+        d.lastSeen=tv.widgetv.home.godaikin.LauncherDaikinClient.reportedAt(state);long age=System.currentTimeMillis()-d.lastSeen;
+        d.connection="connected".equals(state.event)&&age>=-5000&&age<12*60*1000?ConnectionState.ONLINE:ConnectionState.OFFLINE;
+        d.power=state.power==null?PowerState.UNKNOWN:state.power==1?PowerState.ON:PowerState.OFF;
+        d.temperature=state.targetTemperature==null?0:state.targetTemperature.intValue();
+        d.mode=state.mode==null?"Unknown":state.mode==1?"Cool":state.mode==2?"Fan":state.mode==4?"Dry":"Unknown";
+        d.fanSpeed=state.fan==null?"Unknown":state.fan==2?"Low":state.fan==4?"Medium":state.fan==8?"High":state.fan==128?"Auto":"Speed "+state.fan;
+        d.error=(d.daikinWritable?"TV AC controls":"Read-only AC")+" · Cloud reported "+(d.lastSeen==0?"unknown":java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(new java.util.Date(d.lastSeen)))
+            +(d.cached()?" · Cached snapshot":"");d.disconnectedAt=d.connection==ConnectionState.ONLINE?-1:elapsed.getAsLong();
+    }
+    private tv.widgetv.home.godaikin.LauncherDaikinClient cloudClient()throws Exception{
+        if(daikin==null){SmartCredentialStore.Credentials account=credentials.loadExact(SmartCredentialStore.DAIKIN);
+            if(account==null)throw new IllegalStateException();SmartCredentialStore.Credentials binding=credentials.loadExact(SmartCredentialStore.DAIKIN_BINDING);
+            daikin=new tv.widgetv.home.godaikin.LauncherDaikinClient(account.username,account.password,binding==null?null:binding.username);}
+        return daikin;
+    }
+    private void pollDaikin(){
+        if(!active||closed||cloudBusy||cloudLoginRejected||!credentials.hasDaikin()||elapsed.getAsLong()-cloudLastAttempt<30000)return;
+        cloudBusy=true;cloudLastAttempt=elapsed.getAsLong();long tag=generation,epoch=cloudEpoch;
+        network.execute(()->{List<tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus> states=null;String problem=null,binding=null;
+            try{tv.widgetv.home.godaikin.LauncherDaikinClient client=cloudClient();states=client.readAll();binding=client.binding();}catch(Exception e){problem=cloudError(e);}
+            final List<tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus> result=states;final String error=problem,pin=binding;
+            if(closed)return;worker.execute(()->{cloudBusy=false;if(closed||tag!=generation||epoch!=cloudEpoch)return;
+                if(result!=null){try{if(pin!=null)credentials.save(SmartCredentialStore.DAIKIN_BINDING,pin,"");}catch(Exception e){status="GO DAIKIN binding storage failed";}
+                    for(tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus s:result)applyDaikin(s);status="LAN + GO DAIKIN · "+result.size()+" cloud ACs · TV AC controls; others read-only";
+                }else{status=error;cloudLoginRejected=error!=null&&error.startsWith("GO DAIKIN login required");for(SmartDevice d:registry.devices)if(d.cloud()){d.connection=ConnectionState.CONNECTING;d.error=error+" · Cached state";}}
+                save();
+            });
+        });
+    }
+    private void daikinCommand(String id,String field,int value,boolean relative){
+        if(closed||!commands.add(id))return;worker.execute(()->launchDaikinCommand(id,field,value,relative));
+    }
+    private void launchDaikinCommand(String id,String field,int value,boolean relative){
+            SmartDevice d=registry.find(id);if(closed||!active||d==null||!d.cloud()||!d.daikinWritable||d.connection!=ConnectionState.ONLINE){commands.remove(id);return;}
+            if(cloudBusy){d.pending=true;publish();worker.schedule(()->launchDaikinCommand(id,field,value,relative),250,TimeUnit.MILLISECONDS);return;}
+            d.pending=true;d.error="Waiting for fresh cloud state, then actual device confirmation";publish();cloudBusy=true;long tag=generation,epoch=cloudEpoch;String hash=d.hardwareId;
+            network.execute(()->{tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus actual=null;String error=null;
+                try{actual=cloudClient().command(hash,field,value,relative,()->active&&!closed&&generation==tag&&cloudEpoch==epoch);}catch(Exception e){error=cloudError(e);}
+                final tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus result=actual;final String problem=error;
+                if(closed)return;worker.execute(()->{cloudBusy=false;commands.remove(id);if(closed||tag!=generation||epoch!=cloudEpoch)return;
+                    SmartDevice current=registry.find(id);if(current==null)return;current.pending=false;
+                    if(result!=null)applyDaikin(result);else current.error=problem+" · State unconfirmed; command will not be repeated";
+                    cloudLastAttempt=0;save();
+                });
+            });
+    }
+    void saveDaikinCredentials(String user,String password,Consumer<String> done){worker.execute(()->{
+        try{credentials.save(SmartCredentialStore.DAIKIN,user,password);cloudEpoch++;daikin=null;cloudLastAttempt=0;cloudLoginRejected=false;status="GO DAIKIN account saved securely";
+            main.post(()->done.accept(""));pollDaikin();}catch(Exception e){main.post(()->done.accept("GO DAIKIN credentials could not be saved securely."));}publish();
+    });}
+    private static String cloudError(Exception e){
+        if(e instanceof tv.widgetv.home.godaikin.GoDaikinCloudClient.CloudException){String reason=((tv.widgetv.home.godaikin.GoDaikinCloudClient.CloudException)e).reason.name();
+            if(reason.equals("AUTH_REJECTED")||reason.equals("CREDENTIALS_REQUIRED"))return "GO DAIKIN login required; update account in Manage Devices";
+            if(reason.equals("STATE_CHANGED"))return "GO DAIKIN state changed or AC is OFF; refresh before control";
+            return "GO DAIKIN "+reason.replace('_',' ').toLowerCase(java.util.Locale.ROOT);}
+        return "GO DAIKIN connection failed; check internet/account and refresh";
+    }
     void configure(String id,DeviceType type,String name,String room,String ip,String protocol,Consumer<String> done){worker.execute(()->{
         try{if(type!=DeviceType.DAIKIN)LanDeviceHttp.validate(ip);SmartDevice d=id==null?DeviceRegistry.blank(type,name,registry.devices.size()):registry.find(id);if(d==null)throw new IllegalArgumentException();
             for(SmartDevice other:registry.devices)if(!other.id.equals(id)&&!ip.isEmpty()&&other.ip.equals(ip))throw new TpLinkSession.ProtocolException("A device with this IP is already saved");

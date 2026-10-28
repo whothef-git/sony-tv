@@ -75,7 +75,7 @@ final class DeviceCardAdapter extends RecyclerView.Adapter<DeviceCardAdapter.Hol
             p.setTextSize(separator>=0?10:11);
             subtitle=TextUtils.ellipsize(subtitle,new android.text.TextPaint(p),Math.max(30,w-76),TextUtils.TruncateAt.END).toString();
             text(canvas,subtitle,65,43,separator>=0?10:11,SmartHomeStyle.BLUE);
-            int connection=d.connection==ConnectionState.ONLINE?SmartHomeStyle.GREEN:SmartHomeStyle.AMBER;
+            int connection=d.connection==ConnectionState.ONLINE&&!d.cached()?SmartHomeStyle.GREEN:SmartHomeStyle.AMBER;
             p.setColor(connection);canvas.drawCircle(16,60,3,p);text(canvas,d.pending?"Confirming…":d.connectionLabel()+(d.connection!=ConnectionState.ONLINE&&d.lastSeen>0?" · cached":""),24,64,10,connection);
             if(d.type==DeviceType.KASA_KP303) {
                 for(int i=0;i<3;i++){float x=12+i*(w-24)/3;
@@ -84,7 +84,7 @@ final class DeviceCardAdapter extends RecyclerView.Adapter<DeviceCardAdapter.Hol
                     text(canvas,label,x,h-31,9,SmartHomeStyle.BLUE);
                     text(canvas,d.outlets[i].name(),x,h-12,13,d.outlets[i]==PowerState.ON?SmartHomeStyle.GREEN:SmartHomeStyle.GREY);}
             } else {
-                String value=d.type==DeviceType.DAIKIN?d.temperature+"°C":reading(d.watts,0)+" W";
+                String value=d.type==DeviceType.DAIKIN?(d.temperature>0?d.temperature+"°C":"—"):reading(d.watts,0)+" W";
                 text(canvas,value,12,h-33,21,SmartHomeStyle.WHITE);
                 String detail=d.type==DeviceType.DAIKIN?d.mode:reading(d.dailyKwh,2)+" kWh · Today";
                 text(canvas,detail,12,h-13,11,SmartHomeStyle.BLUE);

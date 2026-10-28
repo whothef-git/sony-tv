@@ -16,11 +16,14 @@ import javax.crypto.spec.GCMParameterSpec;
 /** Android Keystore key never leaves the TV. Passwords/tokens never enter ordinary metadata. */
 final class SmartCredentialStore {
     static final String ACCOUNT="tp-link-account";
+    static final String DAIKIN="godaikin-account",DAIKIN_BINDING="godaikin-tv-binding";
     static final class Credentials{final String username,password;Credentials(String u,String p){username=u;password=p;}}
     private static final String ALIAS="octahedron.smart-home.v2";
     private final SharedPreferences encrypted;
     SmartCredentialStore(Context c){encrypted=c.getSharedPreferences("smart_credentials_encrypted_v2",Context.MODE_PRIVATE);}
     boolean hasAccount(){return encrypted.contains(ACCOUNT);}
+    boolean hasDaikin(){return encrypted.contains(DAIKIN);}
+    synchronized Credentials loadExact(String id)throws Exception{return encrypted.contains(id)?load(id):null;}
     private SecretKey key() throws Exception{
         KeyStore store=KeyStore.getInstance("AndroidKeyStore");store.load(null);
         if(!store.containsAlias(ALIAS)){KeyGenerator generator=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");

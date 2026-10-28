@@ -67,7 +67,7 @@ public final class SmartHomeView extends LinearLayout {
     private int selectedIndex(){for(int i=0;i<adapter.items.size();i++)if(adapter.items.get(i).id.equals(selectedId))return i;return -1;}
     private void restoreFocus(){int i=selectedIndex();if(i<0){requestFocus();return;}list.scrollToPosition(i);list.post(()->{if(!cardsFocused||!screenActive)return;int p=selectedIndex();RecyclerView.ViewHolder h=list.findViewHolderForAdapterPosition(p);if(h!=null)h.itemView.requestFocus();});}
     private void refresh(){
-        badge.setText((repository.isDemo()?"DEMO MODE · Simulated data":"LOCAL DEVICES")+" · Manage: MENU / hold OK on Smart Home tab");
+        badge.setText((repository.isDemo()?"DEMO MODE · Simulated data":"SMART HOME · LAN + GO DAIKIN")+" · Manage: MENU / hold OK on Smart Home tab");
         List<SmartDevice> next=repository.visible();boolean found=false;
         for(SmartDevice d:next)if(d.id.equals(selectedId)){found=true;selectedOrder=d.order;}
         if(!found&&!next.isEmpty()){SmartDevice nearest=next.get(0);for(SmartDevice d:next)if(Math.abs(d.order-selectedOrder)<Math.abs(nearest.order-selectedOrder))nearest=d;selectedId=nearest.id;selectedOrder=nearest.order;}

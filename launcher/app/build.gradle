@@ -10,8 +10,8 @@ android {
         applicationId 'tv.widgetv.home'
         minSdk 28
         targetSdk 34
-        versionCode 11
-        versionName '2.0'
+        versionCode 12
+        versionName '2.1'
         testInstrumentationRunner 'tv.widgetv.home.SmartHomeIntegrationChecks'
     }
 
@@ -33,6 +33,11 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+    // Reuse the validated protocol implementation; none of the POC screens/vault enters the launcher.
+    sourceSets.main.java {
+        srcDir '../godaikin-poc/src/main/java'
+        exclude '**/CloudTestActivity.java', '**/TemperatureTestActivity.java', '**/ControlTestActivity.java', '**/CloudCredentialVault.java'
     }
 }
 

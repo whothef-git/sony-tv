@@ -26,7 +26,8 @@ final class DeviceRegistry {
                 d.watts=j.has("watts")?j.optDouble("watts",Double.NaN):Double.NaN;d.dailyKwh=j.has("dailyKwh")?j.optDouble("dailyKwh",Double.NaN):Double.NaN;
                 JSONArray outlets=j.optJSONArray("outlets"),ids=j.optJSONArray("outletIds");
                 for(int n=0;n<3;n++){d.outlets[n]=outlets==null?PowerState.UNKNOWN:PowerState.valueOf(outlets.optString(n,"UNKNOWN"));d.outletIds[n]=ids==null?"":ids.optString(n);}
-                d.disabled=d.type==DeviceType.DAIKIN||j.optBoolean("disabled");d.connection=ConnectionState.CONNECTING;d.disconnectedAt=android.os.SystemClock.elapsedRealtime();
+                d.temperature=j.optInt("temperature",0);d.mode=j.optString("mode","Unknown");d.fanSpeed=j.optString("fanSpeed","Unknown");
+                d.disabled=d.type==DeviceType.DAIKIN&&!d.cloud()||j.optBoolean("disabled");d.connection=ConnectionState.CONNECTING;d.disconnectedAt=android.os.SystemClock.elapsedRealtime();
                 if(d.disabled)d.error="GO DAIKIN controller/API compatibility must be verified. Account login alone is insufficient.";
                 devices.add(d);
             }
@@ -55,6 +56,7 @@ final class DeviceRegistry {
         JSONArray data=new JSONArray();for(SmartDevice d:devices){JSONObject j=new JSONObject();
             j.put("id",d.id).put("type",d.type.name()).put("order",d.order).put("name",d.name).put("room",d.room).put("ip",d.ip)
              .put("hardwareId",d.hardwareId).put("mac",d.mac).put("protocol",d.protocol).put("lastSeen",d.lastSeen).put("power",d.power.name()).put("disabled",d.disabled);
+            if(d.type==DeviceType.DAIKIN)j.put("temperature",d.temperature).put("mode",d.mode).put("fanSpeed",d.fanSpeed);
             if(Double.isFinite(d.watts))j.put("watts",d.watts);if(Double.isFinite(d.dailyKwh))j.put("dailyKwh",d.dailyKwh);
             JSONArray outlets=new JSONArray(),ids=new JSONArray();for(int i=0;i<3;i++){outlets.put(d.outlets[i].name());ids.put(d.outletIds[i]);}j.put("outlets",outlets).put("outletIds",ids);data.put(j);
         }if(!prefs.edit().putString("devices",data.toString()).putStringSet("ignored",new java.util.HashSet<>(ignored)).commit())throw new java.io.IOException("Device registry could not be saved");

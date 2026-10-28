@@ -1,5 +1,29 @@
 # WidgeTV
 
+## Octahedron v2.1 — integrated GO DAIKIN controls
+
+The existing Smart Home grid now displays five cloud-registered Daikin ACs alongside the unchanged
+Tapo plugs and single three-outlet KP303 card. TV AC supports temperature, fan, operating mode and
+power controls; the other four Daikin ACs are read-only. Commands show pending status until fresh
+cloud readback confirms them. Cached/offline snapshots are labeled, and writes are never blindly retried.
+
+Enter the same GO DAIKIN account once through **Manage Devices → GO DAIKIN account**. Credentials
+and the TV AC stable-ID binding use the launcher's Android Keystore storage. The cloud client runs
+directly on the TV with no external backend. All launcher tabs, glass styling and remote navigation remain.
+
+The release reuses protocol sources from `launcher/godaikin-poc`; its test activities and separate
+credential-entry screens are excluded from the launcher APK. No new runtime dependencies are added.
+Build from `launcher/` with `gradlew.bat assembleRelease`; the local deliverable is `Octahedron-v2.1.apk`.
+The single release build, 234 existing protocol mock checks and 16 existing on-TV screen checks passed.
+The eight-device grid, read-only restrictions and KP303 outlet dialog were also checked without writes.
+
+Temperature, Low/High fan and Cool/Fan mode were validated on TV AC in the earlier
+[cloud validation](docs/GO-DAIKIN-PHASE2.3.md). Power is enabled at the user's request but remains
+hardware-unverified, as do the other unexercised settings. This is an unofficial API with periodic
+cloud updates; commands may wait for fresh state. Stable v2.0 is preserved locally for rollback.
+
+## Previous v2.0 baseline
+
 ## Local TV build 2.0 — direct Smart Home integration
 
 Smart Home now defaults to real local-device mode, with a persistent registry and encrypted TP-Link

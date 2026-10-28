@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <application android:label="GO DAIKIN Developer Tests" android:allowBackup="false"
+        android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- Explicit developer launch only. No HOME/launcher filter; never replaces Octahedron. -->
+        <activity android:name=".CloudTestActivity" android:exported="true"
+            android:excludeFromRecents="true" android:screenOrientation="landscape" />
+        <activity android:name=".TemperatureTestActivity" android:exported="true"
+            android:launchMode="singleTask" android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density"
+            android:excludeFromRecents="true" android:screenOrientation="landscape" />
+        <activity android:name=".ControlTestActivity" android:exported="true" android:launchMode="singleTask"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density"
+            android:excludeFromRecents="true" android:screenOrientation="landscape" />
+    </application>
+</manifest>
