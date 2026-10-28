@@ -33,12 +33,12 @@ final class DeviceControlDialog extends Dialog {
         status=label("",12,SmartHomeStyle.AMBER);body.addView(status);
         reading=label("",16,SmartHomeStyle.BLUE);LinearLayout.LayoutParams readingLp=new LinearLayout.LayoutParams(-1,-2);readingLp.topMargin=dp(16);body.addView(reading,readingLp);
         if(d.type!=DeviceType.KASA_KP303) {
-            row("Power");control(()->"Power: "+current().power,()->repo.togglePower(id));
+            row("Power");control(()->"Power: "+current().power,()->{repo.togglePower(id);refresh();});
         }
         if(d.type==DeviceType.DAIKIN) {
-            row("Temperature");control(()->"− Decrease",()->repo.adjustTemperature(id,-1));control(()->"+ Increase",()->repo.adjustTemperature(id,1));
-            row("Operating mode");for(String mode:repo.isDemo()?new String[]{"Cool","Dry","Fan","Auto"}:new String[]{"Cool","Dry","Fan"})control(()->(current().mode.equals(mode)?"✓ ":"")+mode,()->repo.setMode(id,mode));
-            row("Fan speed");for(String speed:new String[]{"Low","Medium","High","Auto"})control(()->(current().fanSpeed.equals(speed)?"✓ ":"")+speed,()->repo.setFanSpeed(id,speed));
+            row("Temperature");control(()->"− Decrease",()->{repo.adjustTemperature(id,-1);refresh();});control(()->"+ Increase",()->{repo.adjustTemperature(id,1);refresh();});
+            row("Operating mode");for(String mode:repo.isDemo()?new String[]{"Cool","Dry","Fan","Auto"}:new String[]{"Cool","Dry","Fan"})control(()->(current().mode.equals(mode)?"✓ ":"")+mode,()->{repo.setMode(id,mode);refresh();});
+            row("Fan speed");for(String speed:new String[]{"Low","Medium","High","Auto"})control(()->(current().fanSpeed.equals(speed)?"✓ ":"")+speed,()->{repo.setFanSpeed(id,speed);refresh();});
         } else if(d.type==DeviceType.KASA_KP303) {
             row("Outlets");for(int i=0;i<3;i++){final int outlet=i;control(()->(repo.isDemo()?"Outlet "+(outlet+1):current().outletNames[outlet])+": "+current().outlets[outlet],()->repo.toggleOutlet(id,outlet));}
         }
@@ -58,7 +58,7 @@ final class DeviceControlDialog extends Dialog {
         Button b=new Button(getContext());b.setAllCaps(false);SmartHomeStyle.font(b,14,SmartHomeStyle.WHITE);b.setMinHeight(dp(44));b.setMinimumHeight(dp(44));
         b.setPadding(dp(8),0,dp(8),0);b.setBackground(SmartHomeStyle.panel(getContext(),false));
         b.setOnFocusChangeListener((v,on)->b.setBackground(SmartHomeStyle.panel(getContext(),on)));
-        buttons.add(b);b.setOnClickListener(v->{SmartDevice d=current();if(d!=null&&!d.pending)action.run();});b.setOnKeyListener((v,code,event)->{
+        buttons.add(b);b.setOnClickListener(v->{SmartDevice d=current();if(d!=null&&(!d.pending||d.type==DeviceType.DAIKIN))action.run();});b.setOnKeyListener((v,code,event)->{
             if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;
             int r=-1,x=-1;for(int i=0;i<rows.size();i++){int j=rows.get(i).indexOf(b);if(j>=0){r=i;x=j;break;}}
             if(code==KeyEvent.KEYCODE_DPAD_UP&&r>0){rows.get(r-1).get(Math.min(x,rows.get(r-1).size()-1)).requestFocus();return true;}
@@ -76,8 +76,7 @@ final class DeviceControlDialog extends Dialog {
         reading.setText(d.type==DeviceType.DAIKIN?(d.temperature>0?d.temperature+"°C":"—")+"  ·  "+d.mode+"  ·  Fan "+d.fanSpeed:
             d.type==DeviceType.TAPO_P110?(repository.isDemo()?"Demo usage: ":"Last confirmed usage: ")+DeviceCardAdapter.reading(d.watts,0)+" W  ·  "+DeviceCardAdapter.reading(d.dailyKwh,2)+" kWh today":repository.isDemo()?"Three independent demo outlets":"Lampu Tidur · iPhone Charger · Laptop");
         for(Runnable update:updates)update.run();
-        for(int i=0;i<buttons.size()-1;i++){boolean enabled=!d.pending&&d.connection==ConnectionState.ONLINE&&!d.disabled
-            &&(repository.isDemo()||d.type!=DeviceType.DAIKIN||d.daikinWritable);buttons.get(i).setClickable(enabled);buttons.get(i).setAlpha(!enabled&&d.type==DeviceType.DAIKIN?.45f:d.pending?.5f:1f);}
+        for(int i=0;i<buttons.size()-1;i++){boolean enabled=(d.type==DeviceType.DAIKIN?d.daikinWritable&&d.connection==ConnectionState.ONLINE:!d.pending&&d.connection==ConnectionState.ONLINE&&!d.disabled)&&(repository.isDemo()||d.type!=DeviceType.DAIKIN||d.daikinWritable);buttons.get(i).setClickable(enabled);buttons.get(i).setAlpha(enabled?1f:d.type==DeviceType.DAIKIN?.45f:d.pending?.5f:1f);}
     }
     @Override protected void onStart(){super.onStart();Window w=getWindow();if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.setLayout((int)(getContext().getResources().getDisplayMetrics().widthPixels*.86f),-2);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);WindowManager.LayoutParams a=w.getAttributes();a.dimAmount=.72f;a.gravity=Gravity.CENTER;w.setAttributes(a);}repository.addListener(listener);rows.get(0).get(0).requestFocus();}
     @Override protected void onStop(){repository.removeListener(listener);super.onStop();}

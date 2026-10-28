@@ -49,7 +49,26 @@ public final class LauncherDaikinClient {
     }
     private static boolean fresh(GoDaikinCloudClient.DeviceStatus d){long age=System.currentTimeMillis()-reportedAt(d);
         return "connected".equals(d.event)&&d.stateVersion!=null&&d.stateVersion>0&&age>=-5000&&age<=120000;}
-    public synchronized GoDaikinCloudClient.DeviceStatus command(String hash,String field,int value,boolean relative,BooleanSupplier active)throws Exception{
+        public synchronized void fastCommand(String hash,String field,int value)throws Exception{
+        if(!authenticated){cloud.authenticate(user,password);authenticated=true;}
+        List<GoDaikinCloudClient.DeviceStatus> devices=readAll();
+        GoDaikinCloudClient.DeviceStatus target=null;
+        for(GoDaikinCloudClient.DeviceStatus d:devices)if(identity(d.id).equals(hash))target=d;
+        if(target==null||!writable(target))throw new GoDaikinCloudClient.CloudException(GoDaikinCloudClient.Failure.TARGET_MISMATCH);
+        JSONObject desired=new JSONObject().put(field,value);
+        if(!ControlCommandGate.validFields(desired))throw new GoDaikinCloudClient.CloudException(GoDaikinCloudClient.Failure.COMMAND_REJECTED);
+        gate.permit=new JSONObject(desired.toString());
+        try{
+            cloud.submitDesired(target.id,desired);
+        }catch(GoDaikinCloudClient.CloudException e){
+            if(e.reason==GoDaikinCloudClient.Failure.TARGET_MISMATCH){
+                cloud.readTargetState(target.id);
+                gate.permit=new JSONObject(desired.toString());
+                cloud.submitDesired(target.id,desired);
+            }else throw e;
+        }finally{gate.permit=null;}
+    }
+public synchronized GoDaikinCloudClient.DeviceStatus command(String hash,String field,int value,boolean relative,BooleanSupplier active)throws Exception{
         GoDaikinCloudClient.DeviceStatus before=null;
         for(int i=0;i<40;i++){
             if(!active.getAsBoolean())throw new GoDaikinCloudClient.CloudException(GoDaikinCloudClient.Failure.CLOSED);

@@ -32,6 +32,7 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
     private final Handler main=new Handler(Looper.getMainLooper());
     private final List<Runnable> listeners=new CopyOnWriteArrayList<>();
     private final java.util.Set<String> busy=ConcurrentHashMap.newKeySet(),commands=ConcurrentHashMap.newKeySet();
+    private final Map<String, java.util.concurrent.ScheduledFuture<?>> daikinTasks = new ConcurrentHashMap<>();
     private final Map<String,SmartDeviceDriver> clients=new ConcurrentHashMap<>();
     private volatile List<SmartDevice> snapshot=Collections.emptyList();
     private volatile String status="Local mode · Scan or add devices in Manage Devices";
@@ -109,11 +110,61 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
             d.pending=true;d.error="";publish();launch(id,command);
         });
     }
-    public void togglePower(String id){SmartDevice d=find(id);if(d!=null&&d.type==DeviceType.DAIKIN){if(d.power!=PowerState.UNKNOWN)daikinCommand(id,"Set_OnOff",d.power==PowerState.ON?0:1,false);return;}if(d==null||d.type!=DeviceType.TAPO_P110||d.power==PowerState.UNKNOWN)return;boolean on=d.power!=PowerState.ON;command(id,(client,input)->client.setPower(input,on));}
+    public void togglePower(String id){
+        SmartDevice d=find(id);
+        if(d!=null&&d.type==DeviceType.DAIKIN){
+            if(d.power!=PowerState.UNKNOWN){
+                int nextVal=d.power==PowerState.ON?0:1;
+                SmartDevice real=registry.find(id);
+                if(real!=null){
+                    real.power=nextVal==1?PowerState.ON:PowerState.OFF;
+                    real.optimisticUntil=System.currentTimeMillis()+25000L;
+                    publish();
+                }
+                daikinCommand(id,"Set_OnOff",nextVal);
+            }
+            return;
+        }
+        if(d==null||d.type!=DeviceType.TAPO_P110||d.power==PowerState.UNKNOWN)return;
+        boolean on=d.power!=PowerState.ON;
+        command(id,(client,input)->client.setPower(input,on));
+    }
     public void toggleOutlet(String id,int index){SmartDevice d=find(id);if(d==null||d.type!=DeviceType.KASA_KP303||index<0||index>2||d.outlets[index]==PowerState.UNKNOWN)return;boolean on=d.outlets[index]!=PowerState.ON;command(id,(client,input)->client.setOutlet(input,index,on));}
-    public void adjustTemperature(String id,int delta){if(Math.abs(delta)==1)daikinCommand(id,"Set_Temp",delta,true);}
-    public void setMode(String id,String mode){int value=mode.equals("Cool")?1:mode.equals("Fan")?2:mode.equals("Dry")?4:-1;if(value>0)daikinCommand(id,"Set_Mode",value,false);}
-    public void setFanSpeed(String id,String speed){int value=speed.equals("Low")?2:speed.equals("Medium")?4:speed.equals("High")?8:speed.equals("Auto")?128:-1;if(value>0)daikinCommand(id,"Set_Fan",value,false);}
+    public void adjustTemperature(String id,int delta){
+        if(Math.abs(delta)!=1)return;
+        SmartDevice real=registry.find(id);
+        if(real!=null&&real.type==DeviceType.DAIKIN){
+            int next=Math.max(16,Math.min(31,real.temperature+delta));
+            real.temperature=next;
+            real.optimisticUntil=System.currentTimeMillis()+25000L;
+            publish();
+            daikinCommand(id,"Set_Temp",next);
+        }
+    }
+    public void setMode(String id,String mode){
+        int value=mode.equals("Cool")?1:mode.equals("Fan")?2:mode.equals("Dry")?4:-1;
+        if(value>0){
+            SmartDevice real=registry.find(id);
+            if(real!=null){
+                real.mode=mode;
+                real.optimisticUntil=System.currentTimeMillis()+25000L;
+                publish();
+            }
+            daikinCommand(id,"Set_Mode",value);
+        }
+    }
+    public void setFanSpeed(String id,String speed){
+        int value=speed.equals("Low")?2:speed.equals("Medium")?4:speed.equals("High")?8:speed.equals("Auto")?128:-1;
+        if(value>0){
+            SmartDevice real=registry.find(id);
+            if(real!=null){
+                real.fanSpeed=speed;
+                real.optimisticUntil=System.currentTimeMillis()+25000L;
+                publish();
+            }
+            daikinCommand(id,"Set_Fan",value);
+        }
+    }
     private void unsupported(String id){if(!closed)worker.execute(()->{SmartDevice d=registry.find(id);if(d!=null){d.error="GO DAIKIN controls are disabled until controller/API compatibility is verified.";publish();}});}
     private static String normalized(String value){return value.replaceAll("(?i)\\s+AC$","").trim().toLowerCase(java.util.Locale.ROOT);}
     private void applyDaikin(tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus state){
@@ -124,10 +175,12 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
         d.hardwareId=hash;d.protocol="GO_DAIKIN";d.disabled=false;d.daikinWritable=daikin!=null&&daikin.writable(state);d.ip=state.ip;
         d.lastSeen=tv.widgetv.home.godaikin.LauncherDaikinClient.reportedAt(state);long age=System.currentTimeMillis()-d.lastSeen;
         d.connection="connected".equals(state.event)&&age>=-5000&&age<12*60*1000?ConnectionState.ONLINE:ConnectionState.OFFLINE;
-        d.power=state.power==null?PowerState.UNKNOWN:state.power==1?PowerState.ON:PowerState.OFF;
-        d.temperature=state.targetTemperature==null?0:state.targetTemperature.intValue();
-        d.mode=state.mode==null?"Unknown":state.mode==1?"Cool":state.mode==2?"Fan":state.mode==4?"Dry":"Unknown";
-        d.fanSpeed=state.fan==null?"Unknown":state.fan==2?"Low":state.fan==4?"Medium":state.fan==8?"High":state.fan==128?"Auto":"Speed "+state.fan;
+        if(System.currentTimeMillis()>=d.optimisticUntil){
+            d.power=state.power==null?PowerState.UNKNOWN:state.power==1?PowerState.ON:PowerState.OFF;
+            d.temperature=state.targetTemperature==null?0:state.targetTemperature.intValue();
+            d.mode=state.mode==null?"Unknown":state.mode==1?"Cool":state.mode==2?"Fan":state.mode==4?"Dry":"Unknown";
+            d.fanSpeed=state.fan==null?"Unknown":state.fan==2?"Low":state.fan==4?"Medium":state.fan==8?"High":state.fan==128?"Auto":"Speed "+state.fan;
+        }
         d.error=(d.daikinWritable?"TV AC controls":"Read-only AC")+" · Cloud reported "+(d.lastSeen==0?"unknown":java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(new java.util.Date(d.lastSeen)))
             +(d.cached()?" · Cached snapshot":"");d.disconnectedAt=d.connection==ConnectionState.ONLINE?-1:elapsed.getAsLong();
     }
@@ -151,22 +204,29 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
             });
         });
     }
-    private void daikinCommand(String id,String field,int value,boolean relative){
-        if(closed||!commands.add(id))return;worker.execute(()->launchDaikinCommand(id,field,value,relative));
+    /** Debounced fast cloud command: UI updates instantly on the click, cloud sends in background. */
+    private void daikinCommand(String id,String field,int value){
+        if(closed||!active)return;
+        SmartDevice d=registry.find(id);
+        if(d==null||!d.cloud()||!d.daikinWritable||d.connection!=ConnectionState.ONLINE)return;
+        d.pending=false;d.error="";
+        String key=id+":"+field;
+        java.util.concurrent.ScheduledFuture<?> prev=daikinTasks.remove(key);
+        if(prev!=null)prev.cancel(false);
+        daikinTasks.put(key,worker.schedule(()->dispatchDaikin(id,field,value),350,TimeUnit.MILLISECONDS));
     }
-    private void launchDaikinCommand(String id,String field,int value,boolean relative){
-            SmartDevice d=registry.find(id);if(closed||!active||d==null||!d.cloud()||!d.daikinWritable||d.connection!=ConnectionState.ONLINE){commands.remove(id);return;}
-            if(cloudBusy){d.pending=true;publish();worker.schedule(()->launchDaikinCommand(id,field,value,relative),250,TimeUnit.MILLISECONDS);return;}
-            d.pending=true;d.error="Waiting for fresh cloud state, then actual device confirmation";publish();cloudBusy=true;long tag=generation,epoch=cloudEpoch;String hash=d.hardwareId;
-            network.execute(()->{tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus actual=null;String error=null;
-                try{actual=cloudClient().command(hash,field,value,relative,()->active&&!closed&&generation==tag&&cloudEpoch==epoch);}catch(Exception e){error=cloudError(e);}
-                final tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus result=actual;final String problem=error;
-                if(closed)return;worker.execute(()->{cloudBusy=false;commands.remove(id);if(closed||tag!=generation||epoch!=cloudEpoch)return;
-                    SmartDevice current=registry.find(id);if(current==null)return;current.pending=false;
-                    if(result!=null)applyDaikin(result);else current.error=problem+" · State unconfirmed; command will not be repeated";
-                    cloudLastAttempt=0;save();
-                });
-            });
+    private void dispatchDaikin(String id,String field,int value){
+        if(closed||!active)return;
+        SmartDevice d=registry.find(id);
+        if(d==null||!d.cloud()||!d.daikinWritable||d.connection!=ConnectionState.ONLINE)return;
+        String hash=d.hardwareId;
+        network.execute(()->{
+            try{
+                cloudClient().fastCommand(hash,field,value);
+            }catch(Exception e){
+                android.util.Log.w(Config.TAG,"daikin fastCommand error: "+e);
+            }
+        });
     }
     void saveDaikinCredentials(String user,String password,Consumer<String> done){worker.execute(()->{
         try{credentials.save(SmartCredentialStore.DAIKIN,user,password);cloudEpoch++;daikin=null;cloudLastAttempt=0;cloudLoginRejected=false;status="GO DAIKIN account saved securely";
