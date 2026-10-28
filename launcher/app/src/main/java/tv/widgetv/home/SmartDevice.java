@@ -37,6 +37,6 @@ final class SmartDevice {
         return type==DeviceType.DAIKIN ? "Daikin" : type==DeviceType.TAPO_P110 ? "Tapo P110" : "Kasa KP303";
     }
     boolean cloud(){return type==DeviceType.DAIKIN&&"GO_DAIKIN".equals(protocol);}
-    boolean cached(){return cloud()&&(lastSeen==0||System.currentTimeMillis()-lastSeen>120000);}
-    String connectionLabel() { return disabled?"Setup required":cloud()&&connection==ConnectionState.ONLINE&&cached()?"Cloud cached":connection==ConnectionState.ONLINE ? "Online" : demo||connection==ConnectionState.CONNECTING?"Connecting":"Offline"; }
+    boolean cached(){return false;}
+    String connectionLabel() { return disabled?"Setup required":connection==ConnectionState.ONLINE ? "Online" : demo||connection==ConnectionState.CONNECTING?"Connecting":"Offline"; }
 }

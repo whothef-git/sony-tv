@@ -172,17 +172,16 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
         for(SmartDevice item:registry.devices)if(item.type==DeviceType.DAIKIN&&item.hardwareId.equals(hash)){d=item;break;}
         if(d==null)for(SmartDevice item:registry.devices)if(item.type==DeviceType.DAIKIN&&item.hardwareId.isEmpty()&&normalized(item.name).equals(normalized(state.name))){d=item;break;}
         if(d==null){d=DeviceRegistry.blank(DeviceType.DAIKIN,state.name,registry.devices.size());registry.devices.add(d);}
-        d.hardwareId=hash;d.protocol="GO_DAIKIN";d.disabled=false;d.daikinWritable=daikin!=null&&daikin.writable(state);d.ip=state.ip;
+        d.hardwareId=hash;d.protocol="GO_DAIKIN";d.disabled=false;d.daikinWritable=true;d.ip=state.ip;
         d.lastSeen=tv.widgetv.home.godaikin.LauncherDaikinClient.reportedAt(state);long age=System.currentTimeMillis()-d.lastSeen;
-        d.connection="connected".equals(state.event)&&age>=-5000&&age<12*60*1000?ConnectionState.ONLINE:ConnectionState.OFFLINE;
+        d.connection="connected".equalsIgnoreCase(state.event)?ConnectionState.ONLINE:ConnectionState.OFFLINE;
         if(System.currentTimeMillis()>=d.optimisticUntil){
             d.power=state.power==null?PowerState.UNKNOWN:state.power==1?PowerState.ON:PowerState.OFF;
             d.temperature=state.targetTemperature==null?0:state.targetTemperature.intValue();
             d.mode=state.mode==null?"Unknown":state.mode==1?"Cool":state.mode==2?"Fan":state.mode==4?"Dry":"Unknown";
             d.fanSpeed=state.fan==null?"Unknown":state.fan==2?"Low":state.fan==4?"Medium":state.fan==8?"High":state.fan==128?"Auto":"Speed "+state.fan;
         }
-        d.error=(d.daikinWritable?"TV AC controls":"Read-only AC")+" · Cloud reported "+(d.lastSeen==0?"unknown":java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(new java.util.Date(d.lastSeen)))
-            +(d.cached()?" · Cached snapshot":"");d.disconnectedAt=d.connection==ConnectionState.ONLINE?-1:elapsed.getAsLong();
+        d.error=d.connection==ConnectionState.ONLINE?"":"AC disconnected / unplugged";d.disconnectedAt=d.connection==ConnectionState.ONLINE?-1:elapsed.getAsLong();
     }
     private tv.widgetv.home.godaikin.LauncherDaikinClient cloudClient()throws Exception{
         if(daikin==null){SmartCredentialStore.Credentials account=credentials.loadExact(SmartCredentialStore.DAIKIN);
@@ -198,8 +197,8 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
             final List<tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus> result=states;final String error=problem,pin=binding;
             if(closed)return;worker.execute(()->{cloudBusy=false;if(closed||tag!=generation||epoch!=cloudEpoch)return;
                 if(result!=null){try{if(pin!=null)credentials.save(SmartCredentialStore.DAIKIN_BINDING,pin,"");}catch(Exception e){status="GO DAIKIN binding storage failed";}
-                    for(tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus s:result)applyDaikin(s);status="LAN + GO DAIKIN · "+result.size()+" cloud ACs · TV AC controls; others read-only";
-                }else{status=error;cloudLoginRejected=error!=null&&error.startsWith("GO DAIKIN login required");for(SmartDevice d:registry.devices)if(d.cloud()){d.connection=ConnectionState.CONNECTING;d.error=error+" · Cached state";}}
+                    for(tv.widgetv.home.godaikin.GoDaikinCloudClient.DeviceStatus s:result)applyDaikin(s);status="LAN + GO DAIKIN · "+result.size()+" cloud ACs · All online ACs controllable";
+                }else{status=error;cloudLoginRejected=error!=null&&error.startsWith("GO DAIKIN login required");for(SmartDevice d:registry.devices)if(d.cloud()){d.connection=ConnectionState.CONNECTING;d.error=error;}}
                 save();
             });
         });
@@ -208,7 +207,7 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
     private void daikinCommand(String id,String field,int value){
         if(closed||!active)return;
         SmartDevice d=registry.find(id);
-        if(d==null||!d.cloud()||!d.daikinWritable||d.connection!=ConnectionState.ONLINE)return;
+        if(d==null||!d.cloud()||d.connection!=ConnectionState.ONLINE)return;
         d.pending=false;d.error="";
         String key=id+":"+field;
         java.util.concurrent.ScheduledFuture<?> prev=daikinTasks.remove(key);
@@ -218,7 +217,7 @@ final class RealSmartHomeRepository implements SmartHomeRepository {
     private void dispatchDaikin(String id,String field,int value){
         if(closed||!active)return;
         SmartDevice d=registry.find(id);
-        if(d==null||!d.cloud()||!d.daikinWritable||d.connection!=ConnectionState.ONLINE)return;
+        if(d==null||!d.cloud()||d.connection!=ConnectionState.ONLINE)return;
         String hash=d.hardwareId;
         network.execute(()->{
             try{

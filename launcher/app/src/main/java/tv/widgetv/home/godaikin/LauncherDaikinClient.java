@@ -25,22 +25,15 @@ public final class LauncherDaikinClient {
         if(!authenticated){cloud.authenticate(user,password);authenticated=true;}
         try{
             List<GoDaikinCloudClient.DeviceStatus> result=cloud.readRegisteredDevices().devices;
-            if(pinned==null||pinned.isEmpty()){
-                // One-time binding to the same user-verified TV registration; all later writes use its full stable ID.
-                GoDaikinCloudClient.DeviceStatus candidate=null;
-                for(GoDaikinCloudClient.DeviceStatus d:result)if("TV".equalsIgnoreCase(d.name)&&"192.168.50.93".equals(d.ip)&&"V1.2.5".equals(d.firmware)){
-                    if(candidate!=null)throw new GoDaikinCloudClient.CloudException(GoDaikinCloudClient.Failure.TARGET_MISMATCH);candidate=d;
-                }
-                if(candidate!=null)pinned=candidate.id;
-            }
-            gate.id=pinned;return result;
+            
+            return result;
         }catch(GoDaikinCloudClient.CloudException e){if(e.reason==GoDaikinCloudClient.Failure.AUTH_REJECTED||e.reason==GoDaikinCloudClient.Failure.CREDENTIALS_REQUIRED||e.reason==GoDaikinCloudClient.Failure.API_REJECTED)authenticated=false;throw e;}
     }
     public synchronized String binding(){return pinned;}
-    public synchronized boolean writable(GoDaikinCloudClient.DeviceStatus d){return pinned!=null&&pinned.equals(d.id);}
+    public synchronized boolean writable(GoDaikinCloudClient.DeviceStatus d){return d!=null&&d.id!=null&&!d.id.isEmpty();}
     private GoDaikinCloudClient.DeviceStatus target(String hash)throws Exception{
         GoDaikinCloudClient.DeviceStatus listed=null;for(GoDaikinCloudClient.DeviceStatus d:readAll())if(identity(d.id).equals(hash))listed=d;
-        if(listed==null||!writable(listed))throw new GoDaikinCloudClient.CloudException(GoDaikinCloudClient.Failure.TARGET_MISMATCH);
+        if(listed==null||!writable(listed))throw new GoDaikinCloudClient.CloudException(GoDaikinCloudClient.Failure.TARGET_MISMATCH);gate.id=listed.id;
         GoDaikinCloudClient.DeviceStatus actual=cloud.readTargetState(listed.id);
         if(!java.util.Objects.equals(listed.power,actual.power)||!java.util.Objects.equals(listed.mode,actual.mode)
             ||!java.util.Objects.equals(listed.fan,actual.fan)||!java.util.Objects.equals(listed.targetTemperature,actual.targetTemperature))
@@ -57,13 +50,10 @@ public final class LauncherDaikinClient {
         if(target==null||!writable(target))throw new GoDaikinCloudClient.CloudException(GoDaikinCloudClient.Failure.TARGET_MISMATCH);
         JSONObject desired=new JSONObject().put(field,value);
         if(!ControlCommandGate.validFields(desired))throw new GoDaikinCloudClient.CloudException(GoDaikinCloudClient.Failure.COMMAND_REJECTED);
-        gate.permit=new JSONObject(desired.toString());
-        try{
-            cloud.submitDesired(target.id,desired);
+        gate.id=target.id;gate.permit=new JSONObject(desired.toString());try{cloud.submitDesired(target.id,desired);
         }catch(GoDaikinCloudClient.CloudException e){
             if(e.reason==GoDaikinCloudClient.Failure.TARGET_MISMATCH){
-                cloud.readTargetState(target.id);
-                gate.permit=new JSONObject(desired.toString());
+                cloud.readTargetState(target.id);gate.id=target.id;gate.permit=new JSONObject(desired.toString());
                 cloud.submitDesired(target.id,desired);
             }else throw e;
         }finally{gate.permit=null;}
@@ -102,8 +92,9 @@ public synchronized GoDaikinCloudClient.DeviceStatus command(String hash,String 
     private static final class Gate implements CloudHttpsTransport.Gate {
         String id;JSONObject permit;
         public boolean allow(String url,Map<String,String> headers,JSONObject body){
-            if(id==null||!GoDaikinCloudClient.STATE_URL.equals(url)||body.length()!=1||!headers.containsKey("authorization"))return false;
-            JSONObject d=body.optJSONObject("requestData");if(d==null||!id.equals(d.opt("thingName"))||!(d.opt("username") instanceof String)||!(d.opt("key") instanceof String))return false;
+            if(!GoDaikinCloudClient.STATE_URL.equals(url)||body.length()!=1||!headers.containsKey("authorization"))return false;
+            JSONObject d=body.optJSONObject("requestData");if(d==null||!(d.opt("thingName") instanceof String)||!(d.opt("username") instanceof String)||!(d.opt("key") instanceof String))return false;
+            if(id!=null&&!id.equals(d.opt("thingName")))return false;
             if(Integer.valueOf(1).equals(d.opt("type")))return d.length()==4;
             JSONObject p=d.optJSONObject("payload"),s=p==null?null:p.optJSONObject("state"),v=s==null?null:s.optJSONObject("desired");
             if(!Integer.valueOf(3).equals(d.opt("type"))||d.length()!=5||p==null||p.length()!=1||s==null||s.length()!=1||v==null||v.length()!=1

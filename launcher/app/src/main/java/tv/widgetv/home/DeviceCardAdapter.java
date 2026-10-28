@@ -75,8 +75,8 @@ final class DeviceCardAdapter extends RecyclerView.Adapter<DeviceCardAdapter.Hol
             p.setTextSize(separator>=0?10:11);
             subtitle=TextUtils.ellipsize(subtitle,new android.text.TextPaint(p),Math.max(30,w-76),TextUtils.TruncateAt.END).toString();
             text(canvas,subtitle,65,43,separator>=0?10:11,SmartHomeStyle.BLUE);
-            int connection=d.connection==ConnectionState.ONLINE&&!d.cached()?SmartHomeStyle.GREEN:SmartHomeStyle.AMBER;
-            p.setColor(connection);canvas.drawCircle(16,60,3,p);text(canvas,d.pending?"Confirming…":d.connectionLabel()+(d.connection!=ConnectionState.ONLINE&&d.lastSeen>0?" · cached":""),24,64,10,connection);
+            int connection=d.connection==ConnectionState.ONLINE?SmartHomeStyle.GREEN:SmartHomeStyle.AMBER;
+            p.setColor(connection);canvas.drawCircle(16,60,3,p);text(canvas,d.pending?"Confirming…":d.connectionLabel(),24,64,10,connection);
             if(d.type==DeviceType.KASA_KP303) {
                 for(int i=0;i<3;i++){float x=12+i*(w-24)/3;
                     String label=d.demo?"Outlet "+(i+1):d.outletNames[i];

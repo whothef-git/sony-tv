@@ -58,7 +58,7 @@ final class DeviceControlDialog extends Dialog {
         Button b=new Button(getContext());b.setAllCaps(false);SmartHomeStyle.font(b,14,SmartHomeStyle.WHITE);b.setMinHeight(dp(44));b.setMinimumHeight(dp(44));
         b.setPadding(dp(8),0,dp(8),0);b.setBackground(SmartHomeStyle.panel(getContext(),false));
         b.setOnFocusChangeListener((v,on)->b.setBackground(SmartHomeStyle.panel(getContext(),on)));
-        buttons.add(b);b.setOnClickListener(v->{SmartDevice d=current();if(d!=null&&(!d.pending||d.type==DeviceType.DAIKIN))action.run();});b.setOnKeyListener((v,code,event)->{
+        buttons.add(b);b.setOnClickListener(v->{SmartDevice d=current();if(d!=null&&d.connection==ConnectionState.ONLINE&&(!d.pending||d.type==DeviceType.DAIKIN))action.run();});b.setOnKeyListener((v,code,event)->{
             if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;
             int r=-1,x=-1;for(int i=0;i<rows.size();i++){int j=rows.get(i).indexOf(b);if(j>=0){r=i;x=j;break;}}
             if(code==KeyEvent.KEYCODE_DPAD_UP&&r>0){rows.get(r-1).get(Math.min(x,rows.get(r-1).size()-1)).requestFocus();return true;}
@@ -71,8 +71,8 @@ final class DeviceControlDialog extends Dialog {
         updates.add(()->b.setText(text.get()));
     }
     private void refresh(){SmartDevice d=current();if(d==null){dismiss();return;}
-        status.setText((repository.isDemo()?"DEMO MODE · In-memory controls":d.type==DeviceType.DAIKIN?"GO DAIKIN CLOUD":"LOCAL DEVICE")+" · "+d.connectionLabel()+(d.pending?" · Waiting for fresh state / actual confirmation":d.connection!=ConnectionState.ONLINE?" · Controls unavailable until online":"")+(d.error.isEmpty()?"":"\n"+d.error));
-        status.setTextColor(d.connection==ConnectionState.ONLINE&&!d.cached()?SmartHomeStyle.GREEN:SmartHomeStyle.AMBER);
+        status.setText((repository.isDemo()?"DEMO MODE · In-memory controls":d.type==DeviceType.DAIKIN?"GO DAIKIN CLOUD":"LOCAL DEVICE")+" · "+d.connectionLabel()+(d.connection!=ConnectionState.ONLINE?" · Offline / unplugged":"")+(d.error.isEmpty()?"":"\n"+d.error));
+        status.setTextColor(d.connection==ConnectionState.ONLINE?SmartHomeStyle.GREEN:SmartHomeStyle.AMBER);
         reading.setText(d.type==DeviceType.DAIKIN?(d.temperature>0?d.temperature+"°C":"—")+"  ·  "+d.mode+"  ·  Fan "+d.fanSpeed:
             d.type==DeviceType.TAPO_P110?(repository.isDemo()?"Demo usage: ":"Last confirmed usage: ")+DeviceCardAdapter.reading(d.watts,0)+" W  ·  "+DeviceCardAdapter.reading(d.dailyKwh,2)+" kWh today":repository.isDemo()?"Three independent demo outlets":"Lampu Tidur · iPhone Charger · Laptop");
         for(Runnable update:updates)update.run();
