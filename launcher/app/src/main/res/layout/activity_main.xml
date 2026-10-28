@@ -264,11 +264,12 @@
                             android:layout_width="match_parent"
                             android:layout_height="76dp" />
 
-                        <!-- Thought follows the timeline, aligned with the clock/date column. -->
+                        <!-- Original MyHadith text fills the space below the prayer timeline. -->
                         <LinearLayout
                             android:id="@+id/thought"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
                             android:layout_marginTop="12dp"
                             android:gravity="center_horizontal"
                             android:orientation="vertical">
@@ -283,17 +284,31 @@
                                 android:textColor="@color/gold_400"
                                 android:textSize="10sp" />
 
-                            <TextView
-                                android:id="@+id/thought_text"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:ellipsize="end"
-                                android:fontFamily="@font/cormorant_garamond_italic"
-                                android:gravity="center"
-                                android:maxLines="3"
-                                android:textColor="@color/plaster_100"
-                                android:textSize="19sp" />
+                            <ScrollView
+                                android:id="@+id/hadith_scroll"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:layout_marginTop="10dp"
+                                android:fillViewport="true"
+                                android:fadeScrollbars="false"
+                                android:overScrollMode="never"
+                                android:scrollbars="vertical">
+                                <TextView
+                                    android:id="@+id/thought_text"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:paddingStart="24dp"
+                                    android:paddingEnd="24dp"
+                                    android:paddingTop="8dp"
+                                    android:paddingBottom="12dp"
+                                    android:fontFamily="@font/alexandria"
+                                    android:gravity="center_horizontal"
+                                    android:textDirection="firstStrong"
+                                    android:lineSpacingExtra="6dp"
+                                    android:textColor="@color/plaster_100"
+                                    android:textSize="16sp" />
+                            </ScrollView>
 
                             <TextView
                                 android:id="@+id/thought_source"
@@ -301,6 +316,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
                                 android:fontFamily="@font/alexandria"
+                                android:gravity="center"
                                 android:textColor="@color/mist_400"
                                 android:textSize="10sp" />
                         </LinearLayout>

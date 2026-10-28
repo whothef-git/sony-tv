@@ -1,0 +1,13 @@
+# Daily hadith on Prayer Time
+
+The card is headed **HADITH FOR TODAY**. Its heading, Arabic matan, Malay meaning and source use Alexandria Regular. The original title, complete matan (including the website's takhrij text) and complete `Maksud Hadith` are displayed without paraphrasing, inserted quote marks or ellipsis. Long entries scroll with the remote.
+
+The app ships a fixed schedule of 365 distinct official page URLs selected from [MyHadith's sitemap](https://myhadith.islam.gov.my/sitemap.xml). It does not bundle or generate hadith translations. The day index is the elapsed number of Malaysia-calendar days since 1 January 2026 modulo 365; it remains stable through restarts and includes leap days without repeating adjacent entries. The schedule repeats after 365 days.
+
+Opening Prayer Time retrieves that day's page directly from `https://myhadith.islam.gov.my/`. Only the title, Arabic text and Malay meaning sections are read. The loaded entry is cached privately on the TV. A new day's entry needs Internet access; a prior day's cached entry is never silently substituted. If a page is unavailable or its format changes, the card shows a loading/unavailable message and retries after a minute while the card is used.
+
+Prayer Time hides the dock and app grid and uses the remaining screen height. Down enters the hadith; Up/Down scroll; Up at the top or Back returns to tab navigation. The source URL remains visible.
+
+Android 10's trust store lacks GlobalSign Root E46, used by the official site's current certificate chain. The official root from `https://secure.globalsign.com/cacert/roote46.crt` is included for `myhadith.islam.gov.my` only, alongside system roots. SHA-256: `CBB9C44D84B8043E1050EA31A69F514955D7BFD2E2C6B49301019AD61D9F5058`. TLS chain and hostname verification remain enabled; other domains are unaffected.
+
+`DailyHadithChecks` is a separate Android instrumentation runner for this area only: it checks the 365 official URLs and unique sequence, date wrapping and leap day, HTML parsing, a real daily page fetch, and an isolated original-text cache. It does not execute Smart Home or other screen tests. Build the test APK with `:app:assembleDebugAndroidTest -PtestRunner=tv.widgetv.home.DailyHadithChecks`, install the debug app/test APK, and invoke `tv.widgetv.home.test/tv.widgetv.home.DailyHadithChecks`. The default existing test runner is unchanged without that build property.
