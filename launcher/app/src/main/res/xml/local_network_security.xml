@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dynamic private LAN IPs cannot be expressed as CIDRs in domain-config. The device HTTP
+     client validates private numeric IPs and forbids redirects. Existing web APIs stay HTTPS;
+     system TLS trust and certificate/hostname checks are never overridden. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

@@ -237,6 +237,15 @@
                         android:layout_marginTop="210dp"
                         android:visibility="gone" />
 
+                    <tv.widgetv.home.SmartHomeView
+                        android:id="@+id/smart_home_screen"
+                        android:layout_width="match_parent"
+                        android:layout_height="300dp"
+                        android:layout_marginStart="56dp"
+                        android:layout_marginEnd="56dp"
+                        android:layout_marginTop="210dp"
+                        android:visibility="gone" />
+
                     <!-- The original full-width prayer timeline, on its own read-only screen. -->
                     <LinearLayout
                         android:id="@+id/prayer_screen"
@@ -322,6 +331,7 @@
                 </FrameLayout>
 
                 <TextView
+                    android:id="@+id/apps_heading"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="68dp"

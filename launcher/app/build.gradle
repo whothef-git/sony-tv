@@ -10,17 +10,34 @@ android {
         applicationId 'tv.widgetv.home'
         minSdk 28
         targetSdk 34
-        versionCode 7
-        versionName '1.6'
+        versionCode 12
+        versionName '2.1'
+        testInstrumentationRunner 'tv.widgetv.home.SmartHomeIntegrationChecks'
     }
 
     buildFeatures {
         buildConfig true // BuildConfig.DEBUG guards the adb preview hooks
     }
 
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Local TV trial: retain the existing signing identity for an in-place update.
+            // Replace with a private release signing configuration before distribution.
+            signingConfig signingConfigs.debug
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+    // Reuse the validated protocol implementation; none of the POC screens/vault enters the launcher.
+    sourceSets.main.java {
+        srcDir '../godaikin-poc/src/main/java'
+        exclude '**/CloudTestActivity.java', '**/TemperatureTestActivity.java', '**/ControlTestActivity.java', '**/CloudCredentialVault.java'
     }
 }
 

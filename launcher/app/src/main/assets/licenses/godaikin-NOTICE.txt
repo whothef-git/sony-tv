@@ -1,0 +1,6 @@
+GO DAIKIN protocol adaptation
+Copyright 2025 Woon Wai Keen, doubleukay/godaikin-ha.
+Apache License 2.0; see godaikin-Apache-2.0.txt.
+Protocol source: https://github.com/doubleukay/godaikin-ha
+Java adaptation and Octahedron release integration modified 2026-10-28.
+Unofficial integration, not affiliated with Daikin. Source licensing is not service authorization.

@@ -76,7 +76,7 @@ public class MainActivity extends Activity {
         return getPackageName() + ".DEBUG_SKY";
     }
 
-    private enum Zone { TOP, TABS, DOCK, GRID, MENU }
+    private enum Zone { TOP, TABS, DOCK, GRID, MENU, SMART }
 
     private ScrollView page;
     private FrameLayout content;
@@ -91,6 +91,7 @@ public class MainActivity extends Activity {
     private ForecastView forecastView;
     private WeatherAtmosphereView atmosphere;
     private View prayerScreen;
+    private SmartHomeView smartHome;
     private int tabIdx;
     private RecyclerView dockList, gridList;
     private TileAdapter dockAdapter, gridAdapter;
@@ -166,6 +167,8 @@ public class MainActivity extends Activity {
         forecastView = findViewById(R.id.forecast_screen);
         atmosphere = findViewById(R.id.weather_atmosphere);
         prayerScreen = findViewById(R.id.prayer_screen);
+        smartHome = findViewById(R.id.smart_home_screen);
+        smartHome.setFocusCardsCallback(() -> focus(Zone.SMART, 0, false));
         pills = new ImageView[]{findViewById(R.id.btn_inputs), findViewById(R.id.btn_wifi),
                 findViewById(R.id.btn_settings)};
         dockPackages = Arrays.asList(getResources().getStringArray(R.array.dock_packages));
@@ -195,6 +198,7 @@ public class MainActivity extends Activity {
             zone = Zone.DOCK;
         }
         if (zone == Zone.MENU) zone = Zone.TOP;
+        if (zone == Zone.SMART) zone = Zone.TABS;
         pillIdx = prefs.getInt("pill", 0);
         pendingPkg = prefs.getString("pkg", null);
 
@@ -226,6 +230,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        smartHome.setRunning(true);
         atmosphere.setRunning(tabIdx == 2);
         IntentFilter timeFilter = new IntentFilter(Intent.ACTION_TIME_TICK);
         timeFilter.addAction(Intent.ACTION_TIME_CHANGED);
@@ -239,6 +244,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        smartHome.setRunning(false);
         atmosphere.setRunning(false);
         unregisterReceiver(timeReceiver);
         if (zone == Zone.MENU) closeMenu();
@@ -275,25 +281,36 @@ public class MainActivity extends Activity {
         getSystemService(ConnectivityManager.class).unregisterNetworkCallback(networkCallback);
         io.shutdownNow();
         weather.shutdown();
+        smartHome.shutdown();
     }
 
     private void showScreen(int index, boolean animate) {
         int previous = tabIdx;
         boolean changed = previous != index;
         tabIdx = index;
+        boolean smart = index == 3;
+        // INVISIBLE retains all original bounds so switching pages cannot move the Home header.
+        awayRow.setVisibility(smart || !cfg.secondEnabled ? View.INVISIBLE : View.VISIBLE);
+        findViewById(R.id.dock_band).setVisibility(smart ? View.INVISIBLE : View.VISIBLE);
+        gridList.setVisibility(smart ? View.INVISIBLE : View.VISIBLE);
+        findViewById(R.id.apps_heading).setVisibility(smart ? View.INVISIBLE : View.VISIBLE);
+        page.setDescendantFocusability(smart ? ViewGroup.FOCUS_AFTER_DESCENDANTS : ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        smartHome.setScreenActive(smart);
         screenTabs.setState(index, zone == Zone.TABS);
         atmosphere.setScreenActive(index == 2, animate);
         atmosphere.setRunning(resumed && index == 2);
-        View target = index == 1 ? prayerScreen : index == 2 ? forecastView : null;
+        View target = index == 1 ? prayerScreen : index == 2 ? forecastView : index == 3 ? smartHome : null;
         if (!animate) {
             prayerScreen.animate().cancel(); forecastView.animate().cancel();
+            smartHome.animate().cancel(); smartHome.setVisibility(smart ? View.VISIBLE : View.GONE);
+            smartHome.setAlpha(1f); smartHome.setTranslationX(0);
             prayerScreen.setVisibility(index == 1 ? View.VISIBLE : View.GONE);
             forecastView.setVisibility(index == 2 ? View.VISIBLE : View.GONE);
             prayerScreen.setAlpha(1f); forecastView.setAlpha(1f);
             prayerScreen.setTranslationX(0); forecastView.setTranslationX(0);
         } else if (changed) {
             float direction = index > previous ? 1f : -1f;
-            View outgoing = previous == 1 ? prayerScreen : previous == 2 ? forecastView : null;
+            View outgoing = previous == 1 ? prayerScreen : previous == 2 ? forecastView : previous == 3 ? smartHome : null;
             if (outgoing != null) {
                 outgoing.animate().cancel();
                 outgoing.animate().alpha(0f).translationX(-direction * dp(8)).setDuration(220)
@@ -387,6 +404,10 @@ public class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent ev) {
         int code = ev.getKeyCode();
         boolean down = ev.getAction() == KeyEvent.ACTION_DOWN;
+        if (code == KeyEvent.KEYCODE_MENU && tabIdx == 3) {
+            if (!down) smartHome.openManagement();
+            return true;
+        }
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_DPAD_DOWN:
@@ -397,14 +418,17 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                if (!down && !ev.isCanceled()) select();
+                if (!down && !ev.isCanceled()) {
+                    if (tabIdx == 3 && zone == Zone.TABS && ev.getEventTime() - ev.getDownTime() >= 600) smartHome.openManagement();
+                    else select();
+                }
                 return true;
             case KeyEvent.KEYCODE_BACK:
                 // Back closes Inputs first; otherwise it returns to the Home screen.
                 if (!down && zone == Zone.MENU) { closeMenu(); return true; }
                 if (!down && tabIdx != 0) {
                     showScreen(0, true);
-                    if (zone == Zone.TABS) focus(Zone.TABS, 0, true);
+                    if (zone == Zone.TABS || zone == Zone.SMART) focus(Zone.TABS, 0, true);
                 }
                 return true;
             default:
@@ -424,10 +448,14 @@ public class MainActivity extends Activity {
                 break;
             case TABS:
                 if (left && tabIdx > 0) focus(Zone.TABS, tabIdx - 1, true);
-                else if (right && tabIdx < 2) focus(Zone.TABS, tabIdx + 1, true);
+                else if (right && tabIdx < ScreenTabs.LABELS.length - 1) focus(Zone.TABS, tabIdx + 1, true);
                 else if (up) focus(Zone.TOP, pillIdx, true);
+                else if (dn && tabIdx == 3) focus(Zone.SMART, 0, true);
                 else if (dn && dockN > 0) focus(Zone.DOCK, clamp(dockIdx, dockN), true);
                 else if (dn && gridN > 0) focus(Zone.GRID, clamp(gridIdx, gridN), true);
+                break;
+            case SMART:
+                if (smartHome.move(code)) focus(Zone.TABS, 3, true);
                 break;
             case DOCK:
                 if (left && dockIdx > 0) focus(Zone.DOCK, dockIdx - 1, true);
@@ -455,6 +483,9 @@ public class MainActivity extends Activity {
 
     private void select() {
         switch (zone) {
+            case SMART:
+                smartHome.openSelected();
+                break;
             case TOP:
                 if (pillIdx == 0) openMenu();
                 else if (pillIdx == 1) start(new Intent(Settings.ACTION_WIFI_SETTINGS));
@@ -508,6 +539,7 @@ public class MainActivity extends Activity {
         switch (zone) {
             case TOP: return pills[pillIdx];
             case TABS: return screenTabs;
+            case SMART: return smartHome.selectedView();
             case DOCK: return dockList.getLayoutManager().findViewByPosition(dockIdx);
             case GRID: return gridList.getLayoutManager().findViewByPosition(gridIdx);
             case MENU: return menu.getChildAt(menuIdx);
@@ -519,6 +551,9 @@ public class MainActivity extends Activity {
         View v = focusedView();
         if (v == null) return;
         switch (zone) {
+            case SMART:
+                smartHome.setCardsFocused(on);
+                break;
             case DOCK:
             case GRID:
                 TileAdapter.setLook(v, on);
@@ -564,6 +599,12 @@ public class MainActivity extends Activity {
             screenTabs.setLayoutParams(nav);
         }
         int screenTop = tabsTop + dp(52);
+        FrameLayout.LayoutParams smartLp = (FrameLayout.LayoutParams) smartHome.getLayoutParams();
+        int smartHeight = Math.max(dp(230), firstScreenH - screenTop - dp(18));
+        if (smartLp.topMargin != screenTop || smartLp.height != smartHeight) {
+            smartLp.topMargin = screenTop; smartLp.height = smartHeight;
+            smartHome.setLayoutParams(smartLp);
+        }
         FrameLayout.LayoutParams prayerLp = (FrameLayout.LayoutParams) prayerScreen.getLayoutParams();
         if (prayerLp.topMargin != screenTop) {
             prayerLp.topMargin = screenTop;
