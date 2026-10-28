@@ -19,7 +19,7 @@ import java.util.Locale;
 
 /**
  * Read-only weather page: current conditions, extended hourly forecast, 5-day daily outlook.
- * onDraw() allocates NOTHING — all Paints, Shaders and Gradients are pre-built.
+ * Paints and icons are reused; the Weather page owns the space below the header.
  */
 public final class ForecastView extends View {
 
@@ -53,7 +53,9 @@ public final class ForecastView extends View {
 
         Typeface base = getResources().getFont(R.font.outfit);
         tNorm.setTypeface(Typeface.create(base, 400, false));
-        tBold.setTypeface(Typeface.create(base, 700, false));
+        tBold.setTypeface(Typeface.create(base, 500, false));
+        tNorm.setFontVariationSettings("'wght' 400");
+        tBold.setFontVariationSettings("'wght' 500");
         tNorm.setAntiAlias(true);
         tBold.setAntiAlias(true);
         surface.setAntiAlias(true);
@@ -136,8 +138,10 @@ public final class ForecastView extends View {
             canvas.restore(); return;
         }
 
-        float upperH   = Math.min(176f, h * 0.56f);
-        float lowerT   = upperH + 10f;
+        // Reserve a full daily strip at the old dock position instead of squeezing
+        // fixed-height hourly content into a fraction of the original short panel.
+        float upperH   = Math.min(202f, h - 122f);
+        float lowerT   = upperH + 12f;
         float lowerB   = h - 20f;
         float footerY  = h - 5f;
 
@@ -186,21 +190,21 @@ public final class ForecastView extends View {
         for (int i = 0; i < nH; i++) {
             Weather.Hour hr = hrs.get(i);
             float cx = hL + 14 + cW * (i + 0.5f);
-            String timeStr = (i == 0) ? "Now"
-                    : Instant.ofEpochMilli(hr.at).atZone(JakimProvider.MALAYSIA).format(fmt);
+            String timeStr = Instant.ofEpochMilli(hr.at).atZone(JakimProvider.MALAYSIA).format(fmt);
 
             if (i == 0) bold(canvas, timeStr, cx, 48, 11.5f, WHITE, Paint.Align.CENTER);
             else         norm(canvas, timeStr, cx, 48, 11.5f, WHITE, Paint.Align.CENTER);
 
             icon(canvas, hr.code, hr.day, cx - 11, 57, 22);
 
-            if (hr.rain > 0) bold(canvas, hr.rain + "%", cx, 96, 10, RAIN_COLOR, Paint.Align.CENTER);
-            else             norm(canvas, "—", cx, 96, 10, 0x40B7D0E9, Paint.Align.CENTER);
-
-            bold(canvas, hr.temp + "°", cx, 122, 16, WHITE, Paint.Align.CENTER);
-
-            if (hr.humidity > 0)
-                norm(canvas, hr.humidity + "%", cx, 148, 10, 0xFF8EAAC5, Paint.Align.CENTER);
+            bold(canvas, hr.temp + "°", cx, 101, 16, WHITE, Paint.Align.CENTER);
+            norm(canvas, hr.apparentTemp == Integer.MIN_VALUE ? "Feels —" : "Feels " + hr.apparentTemp + "°",
+                    cx, 120, 10, MUTED_LT, Paint.Align.CENTER);
+            norm(canvas, "Rain " + hr.rain + "%", cx, 138, 10, RAIN_COLOR, Paint.Align.CENTER);
+            norm(canvas, hr.humidity < 0 ? "Humidity —" : "Humidity " + hr.humidity + "%",
+                    cx, 156, 9.5f, MUTED, Paint.Align.CENTER);
+            norm(canvas, hr.windSpeed < 0 ? "Wind —" : "Wind " + hr.windSpeed + " km/h",
+                    cx, 174, 9.5f, MUTED, Paint.Align.CENTER);
         }
 
         // ── 5-day strip ───────────────────────────────────────────────────
