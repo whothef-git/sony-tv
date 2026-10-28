@@ -76,7 +76,7 @@ public class MainActivity extends Activity {
         return getPackageName() + ".DEBUG_SKY";
     }
 
-    private enum Zone { TOP, TABS, DOCK, GRID, MENU, SMART }
+    private enum Zone { TOP, TABS, DOCK, GRID, MENU, SMART, HADITH }
 
     private ScrollView page;
     private FrameLayout content;
@@ -117,7 +117,9 @@ public class MainActivity extends Activity {
     private int fakeMinutes = -1; // debug fake_time as minutes of the day, or -1
     /** Debug builds only: a fixed local date for the thought of the day (adb fake_date), or null. */
     private LocalDate fakeDate;
-    private Thoughts thoughts;
+    private DailyHadith hadith;
+    private ScrollView hadithScroll;
+    private String shownHadithUrl;
     private View hereWeather, thought;
     private ImageView awayFlag;
     private TextView hereTemp, awayTemp, awayRange, thoughtTag, thoughtText, thoughtSource;
@@ -148,7 +150,8 @@ public class MainActivity extends Activity {
         thoughtTag = findViewById(R.id.thought_tag);
         thoughtText = findViewById(R.id.thought_text);
         thoughtSource = findViewById(R.id.thought_source);
-        thoughts = new Thoughts(this);
+        hadithScroll = findViewById(R.id.hadith_scroll);
+        hadith = new DailyHadith(this);
         cfg = Config.get(this);
         header = findViewById(R.id.header);
         awayRow = findViewById(R.id.away_row);
@@ -199,6 +202,7 @@ public class MainActivity extends Activity {
         }
         if (zone == Zone.MENU) zone = Zone.TOP;
         if (zone == Zone.SMART) zone = Zone.TABS;
+        if (zone == Zone.HADITH) zone = Zone.TABS;
         pillIdx = prefs.getInt("pill", 0);
         pendingPkg = prefs.getString("pkg", null);
 
@@ -283,6 +287,7 @@ public class MainActivity extends Activity {
         getSystemService(ConnectivityManager.class).unregisterNetworkCallback(networkCallback);
         io.shutdownNow();
         weather.shutdown();
+        hadith.shutdown();
         smartHome.shutdown();
     }
 
@@ -291,7 +296,7 @@ public class MainActivity extends Activity {
         boolean changed = previous != index;
         tabIdx = index;
         boolean smart = index == 3;
-        boolean hideApps = smart || index == 2;
+        boolean hideApps = smart || index == 1 || index == 2;
         // INVISIBLE retains all original bounds so switching pages cannot move the Home header.
         awayRow.setVisibility(smart || !cfg.secondEnabled ? View.INVISIBLE : View.VISIBLE);
         findViewById(R.id.dock_band).setVisibility(hideApps ? View.INVISIBLE : View.VISIBLE);
@@ -302,6 +307,7 @@ public class MainActivity extends Activity {
         screenTabs.setState(index, zone == Zone.TABS);
         atmosphere.setScreenActive(index == 2, animate);
         atmosphere.setRunning(resumed && index == 2);
+        if (index == 1) renderHadith();
         View target = index == 1 ? prayerScreen : index == 2 ? forecastView : index == 3 ? smartHome : null;
         if (!animate) {
             prayerScreen.animate().cancel(); forecastView.animate().cancel();
@@ -429,6 +435,7 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_BACK:
                 // Back closes Inputs first; otherwise it returns to the Home screen.
                 if (!down && zone == Zone.MENU) { closeMenu(); return true; }
+                if (!down && zone == Zone.HADITH) { focus(Zone.TABS, 1, true); return true; }
                 if (!down && tabIdx != 0) {
                     showScreen(0, true);
                     if (zone == Zone.TABS || zone == Zone.SMART) focus(Zone.TABS, 0, true);
@@ -454,9 +461,14 @@ public class MainActivity extends Activity {
                 else if (right && tabIdx < ScreenTabs.LABELS.length - 1) focus(Zone.TABS, tabIdx + 1, true);
                 else if (up) focus(Zone.TOP, pillIdx, true);
                 else if (dn && tabIdx == 3) focus(Zone.SMART, 0, true);
+                else if (dn && tabIdx == 1) focus(Zone.HADITH, 0, true);
                 else if (dn && tabIdx == 2) break; // Weather uses the dock area; never focus hidden apps.
                 else if (dn && dockN > 0) focus(Zone.DOCK, clamp(dockIdx, dockN), true);
                 else if (dn && gridN > 0) focus(Zone.GRID, clamp(gridIdx, gridN), true);
+                break;
+            case HADITH:
+                if (up && hadithScroll.getScrollY() == 0 || left || right) focus(Zone.TABS, 1, true);
+                else if (up || dn) hadithScroll.smoothScrollBy(0, (up ? -1 : 1) * Math.max(dp(80), hadithScroll.getHeight() * 2 / 3));
                 break;
             case SMART:
                 if (smartHome.move(code)) focus(Zone.TABS, 3, true);
@@ -544,6 +556,7 @@ public class MainActivity extends Activity {
             case TOP: return pills[pillIdx];
             case TABS: return screenTabs;
             case SMART: return smartHome.selectedView();
+            case HADITH: return hadithScroll;
             case DOCK: return dockList.getLayoutManager().findViewByPosition(dockIdx);
             case GRID: return gridList.getLayoutManager().findViewByPosition(gridIdx);
             case MENU: return menu.getChildAt(menuIdx);
@@ -555,6 +568,9 @@ public class MainActivity extends Activity {
         View v = focusedView();
         if (v == null) return;
         switch (zone) {
+            case HADITH:
+                thoughtTag.setAlpha(on ? 1f : .8f);
+                break;
             case SMART:
                 smartHome.setCardsFocused(on);
                 break;
@@ -610,8 +626,10 @@ public class MainActivity extends Activity {
             smartHome.setLayoutParams(smartLp);
         }
         FrameLayout.LayoutParams prayerLp = (FrameLayout.LayoutParams) prayerScreen.getLayoutParams();
-        if (prayerLp.topMargin != screenTop) {
+        int prayerHeight = Math.max(dp(250), firstScreenH - screenTop - dp(18));
+        if (prayerLp.topMargin != screenTop || prayerLp.height != prayerHeight) {
             prayerLp.topMargin = screenTop;
+            prayerLp.height = prayerHeight;
             prayerScreen.setLayoutParams(prayerLp);
         }
         FrameLayout.LayoutParams forecastLp = (FrameLayout.LayoutParams) forecastView.getLayoutParams();
@@ -814,7 +832,14 @@ public class MainActivity extends Activity {
         tp.topMargin = cfg.prayerEnabled ? dp(12) : 0;
         thought.setLayoutParams(tp);
         thoughtTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10 + l);
-        thoughtText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19 + l * 2);
+        Typeface hadithFont = Typeface.create(getResources().getFont(R.font.alexandria), 400, false);
+        thoughtTag.setTypeface(hadithFont);
+        thoughtText.setTypeface(hadithFont);
+        thoughtSource.setTypeface(hadithFont);
+        thoughtTag.setFontVariationSettings("'wght' 400");
+        thoughtText.setFontVariationSettings("'wght' 400");
+        thoughtSource.setFontVariationSettings("'wght' 400");
+        thoughtText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16 + l);
         thoughtSource.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9 + l);
         if (day != null) renderDateAndWeather();
     }
@@ -849,7 +874,7 @@ public class MainActivity extends Activity {
         timeline.setDay(day.isJakim ? day : null);
         sky.update(day);
         renderDateAndWeather();
-        renderThought();
+        renderHadith();
         if (BuildConfig.DEBUG && cfg.prayerEnabled) timeline.post(this::logExpectedDot);
     }
 
@@ -918,25 +943,34 @@ public class MainActivity extends Activity {
         return sb;
     }
 
-    /** Thought of the day; the pick only changes when the date (in the TV's time zone) changes. */
-    private void renderThought() {
+    /** Original MyHadith entry, selected by Malaysia's date on a stable 365-day cycle. */
+    private void renderHadith() {
         if (!cfg.thoughtsEnabled) {
             thought.setVisibility(View.GONE);
             return;
         }
         LocalDate today = fakeDate != null ? fakeDate
-                : java.time.Instant.ofEpochMilli(nowMillis()).atZone(ZoneId.systemDefault()).toLocalDate();
-        if (today.equals(shownThoughtDate)) return;
-        Thoughts.Thought t = thoughts.pick(today);
-
-        shownThoughtDate = today;
-        thought.setVisibility(t == null ? View.GONE : View.VISIBLE);
-        if (t == null) return;
-        thoughtTag.setText(t.friday ? "Jumu'ah Mubarak" : "Thought for today");
-        thoughtText.setText("“" + t.text + "”");
-        thoughtSource.setText(t.source);
-        thoughtSource.setVisibility(t.source == null ? View.GONE : View.VISIBLE);
-        Log.i(TAG, "thought: date=" + today + " friday=" + t.friday + " source=" + t.source);
+                : java.time.Instant.ofEpochMilli(nowMillis()).atZone(JakimProvider.MALAYSIA).toLocalDate();
+        if (!today.equals(shownThoughtDate)) {
+            shownThoughtDate = today; shownHadithUrl = null; hadithScroll.scrollTo(0, 0);
+        }
+        thought.setVisibility(View.VISIBLE);
+        thoughtTag.setText("HADITH FOR TODAY");
+        DailyHadith.Entry entry = hadith.get(today);
+        if (entry != null) {
+            if (!entry.url.equals(shownHadithUrl)) {
+                thoughtText.setText(entry.display());
+                shownHadithUrl = entry.url;
+                hadithScroll.scrollTo(0, 0);
+            }
+        } else {
+            thoughtText.setText(hadith.failed() ? "Hadith hari ini belum dapat dimuatkan. Sila semak sambungan Internet."
+                    : "Memuatkan hadith asal daripada MyHadith JAKIM…");
+            if (tabIdx == 1) hadith.maybeFetch(today, () -> { if (!isDestroyed()) renderHadith(); });
+        }
+        thoughtSource.setText("MyHadith · JAKIM\n" + (hadith.url(today) == null ? "" : hadith.url(today))
+                + "   ·   ↓ Read / scroll   ·   Back: tabs");
+        thoughtSource.setVisibility(View.VISIBLE);
     }
 
     private static void append(SpannableStringBuilder sb, CharSequence text, int color) {

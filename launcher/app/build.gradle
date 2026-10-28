@@ -12,7 +12,7 @@ android {
         targetSdk 34
         versionCode 12
         versionName '2.1'
-        testInstrumentationRunner 'tv.widgetv.home.SmartHomeIntegrationChecks'
+        testInstrumentationRunner project.findProperty('testRunner') ?: 'tv.widgetv.home.SmartHomeIntegrationChecks'
     }
 
     buildFeatures {

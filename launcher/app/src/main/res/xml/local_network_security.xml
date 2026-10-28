@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Dynamic private LAN IPs cannot be expressed as CIDRs in domain-config. The device HTTP
      client validates private numeric IPs and forbids redirects. Existing web APIs stay HTTPS;
-     system TLS trust and certificate/hostname checks are never overridden. -->
+     certificate/hostname checks remain enabled. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />
+    <!-- Android 10 lacks this newer public root. Scope the extra CA to MyHadith only. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">myhadith.islam.gov.my</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/globalsign_root_e46" />
+        </trust-anchors>
+    </domain-config>
 </network-security-config>
