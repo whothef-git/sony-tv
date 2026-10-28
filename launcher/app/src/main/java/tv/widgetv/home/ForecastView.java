@@ -2,7 +2,6 @@ package tv.widgetv.home;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -15,125 +14,281 @@ import android.view.View;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Locale;
 
-/** Read-only weather page: current conditions, next six hours, and five days. */
+/**
+ * Read-only weather page: current conditions, extended hourly forecast, 5-day daily outlook.
+ * onDraw() allocates NOTHING — all Paints, Shaders and Gradients are pre-built.
+ */
 public final class ForecastView extends View {
-    private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG), surface = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    // Two weights — never call setFontVariationSettings inside onDraw
+    private final Paint tNorm = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint tBold = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint surface = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
     private final SparseArray<Drawable> icons = new SparseArray<>();
     private final float d;
-    private final Typeface type;
+
+    // Pre-allocated shaders — updated in setWeather() / onSizeChanged()
+    private LinearGradient barGradient;   // reused for all day range bars
+    private float barGradW = -1;          // track width used to build barGradient
+
     private Weather.City current;
     private Weather.Forecast forecast;
     private boolean failed;
-    private Shader background;
-    private static final int WHITE = 0xFFF1F6FF, MUTED = 0xFFB7D0E9, RAIN = 0xFF87CAFF;
+
+    private static final int WHITE      = 0xFFF1F6FF;
+    private static final int MUTED      = 0xFF9FBAD4;
+    private static final int MUTED_LT   = 0xFFD8E7F6;
+    private static final int RAIN_COLOR = 0xFF6DBBFF;
+    private static final int CHIP_BG    = 0x35101F30;
+    private static final int PANEL_BG   = 0x4016273C;
+    private static final int PANEL_EDGE = 0x20C0D8EC;
 
     public ForecastView(Context c, AttributeSet a) {
         super(c, a);
         d = getResources().getDisplayMetrics().density;
-        type = Typeface.create(getResources().getFont(R.font.outfit), 400, false);
-        text.setTypeface(type);
-        text.setFontVariationSettings("'wght' 400");
+
+        Typeface base = getResources().getFont(R.font.outfit);
+        tNorm.setTypeface(Typeface.create(base, 400, false));
+        tBold.setTypeface(Typeface.create(base, 700, false));
+        tNorm.setAntiAlias(true);
+        tBold.setAntiAlias(true);
+        surface.setAntiAlias(true);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
     }
-    void setWeather(Weather.City[] cities, Weather.Forecast forecast, boolean failed) {
+
+    void setWeather(Weather.City[] cities, Weather.Forecast f, boolean failed) {
         current = cities == null ? null : cities[0];
-        this.forecast = forecast; this.failed = failed;
-        setContentDescription(current == null || forecast == null ? "Weather forecast unavailable or loading" :
-                "Shah Alam. " + current.temp + " degrees. " + condition(current.code) + ". " + forecast.hours.size() +
-                        " hourly forecasts and " + forecast.days.size() + " daily forecasts. From Open-Meteo.");
+        forecast = f;
+        this.failed = failed;
+        barGradW = -1; // force gradient rebuild on next draw
+        setContentDescription(current == null || f == null
+                ? "Weather forecast unavailable or loading"
+                : "Shah Alam. " + current.temp + "°. " + ForecastView.condition(current.code));
         invalidate();
     }
-    @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
-        background = new LinearGradient(0, 0, w/d, h/d, new int[]{0xFF284D6B,0xFF1C3656,0xFF172B47}, null, Shader.TileMode.CLAMP);
+
+    // ── helpers (no allocation) ────────────────────────────────────────────
+
+    private void norm(Canvas c, String s, float x, float y, float sz, int color, Paint.Align a) {
+        tNorm.setTextSize(sz); tNorm.setColor(color); tNorm.setTextAlign(a);
+        c.drawText(s, x, y, tNorm);
     }
-    private void label(Canvas c, String value, float x, float y, float size, int color, Paint.Align align) {
-        text.setTextSize(size); text.setColor(color); text.setTextAlign(align);
-        c.drawText(value, x, y, text);
+    private void bold(Canvas c, String s, float x, float y, float sz, int color, Paint.Align a) {
+        tBold.setTextSize(sz); tBold.setColor(color); tBold.setTextAlign(a);
+        c.drawText(s, x, y, tBold);
     }
-    private void panel(Canvas c, float l, float t, float r, float b) {
-        rect.set(l,t,r,b); surface.setShader(null); surface.setStyle(Paint.Style.FILL); surface.setColor(0x46364C67);
-        c.drawRoundRect(rect, 13, 13, surface);
-        surface.setStyle(Paint.Style.STROKE); surface.setStrokeWidth(.5f); surface.setColor(0x38C0D8EC);
-        c.drawRoundRect(rect, 13, 13, surface); surface.setStyle(Paint.Style.FILL);
+
+    private void panel(Canvas c, float l, float t, float r, float b, float r2) {
+        rect.set(l, t, r, b);
+        surface.setShader(null); surface.setStyle(Paint.Style.FILL); surface.setColor(PANEL_BG);
+        c.drawRoundRect(rect, r2, r2, surface);
+        surface.setStyle(Paint.Style.STROKE); surface.setStrokeWidth(0.75f); surface.setColor(PANEL_EDGE);
+        c.drawRoundRect(rect, r2, r2, surface);
+        surface.setStyle(Paint.Style.FILL);
     }
+
+    private void chip(Canvas c, float l, float t, float r, float b) {
+        rect.set(l, t, r, b);
+        surface.setShader(null); surface.setStyle(Paint.Style.FILL); surface.setColor(CHIP_BG);
+        c.drawRoundRect(rect, 8, 8, surface);
+        surface.setStyle(Paint.Style.STROKE); surface.setStrokeWidth(0.5f); surface.setColor(0x18FFFFFF);
+        c.drawRoundRect(rect, 8, 8, surface);
+        surface.setStyle(Paint.Style.FILL);
+    }
+
     private void icon(Canvas c, int code, boolean day, float x, float y, int size) {
-        int resource = Weather.icon(new Weather.City(0, code, day, 0, 0, false));
-        Drawable image = icons.get(resource);
-        if (image == null) { image = getResources().getDrawable(resource, null).mutate(); image.setTint(WHITE); icons.put(resource, image); }
-        c.save(); c.translate(x, y); image.setBounds(0, 0, size, size); image.draw(c); c.restore();
+        int res = Weather.icon(new Weather.City(0, code, day, 0, 0, false));
+        Drawable img = icons.get(res);
+        if (img == null) {
+            img = getResources().getDrawable(res, null).mutate();
+            img.setTint(WHITE); icons.put(res, img);
+        }
+        c.save(); c.translate(x, y); img.setBounds(0, 0, size, size); img.draw(c); c.restore();
     }
-    @Override protected void onDraw(Canvas canvas) {
-        Canvas c = canvas;
-        // Keep the daily rows separated even when the header leaves a shorter content area.
-        float unit = d * Math.min(1f, getHeight() / (200f * d));
-        c.save(); c.scale(unit, unit);
-        float w = getWidth()/unit, h = getHeight()/unit;
-        rect.set(0,0,w,h); surface.setShader(background); surface.setStyle(Paint.Style.FILL); surface.setAlpha(90);
-        c.drawRoundRect(rect,18,18,surface); surface.setShader(null);
+
+    private void divider(Canvas c, float x, float t, float b) {
+        surface.setShader(null); surface.setStyle(Paint.Style.FILL);
+        surface.setColor(0x14FFFFFF); surface.setStrokeWidth(0.5f);
+        c.drawLine(x, t, x, b, surface);
+    }
+
+    // ── draw ──────────────────────────────────────────────────────────────
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        // All coordinates are in dp; canvas is scaled by density.
+        canvas.save();
+        canvas.scale(d, d);
+        float w = getWidth() / d;
+        float h = getHeight() / d;
+
         if (current == null || forecast == null) {
-            label(c, failed ? "Forecast unavailable" : "Loading forecast…", w/2, h/2-4, 22, WHITE, Paint.Align.CENTER);
-            label(c, failed ? "Check your connection. The launcher will retry automatically." : "Shah Alam · Open-Meteo", w/2, h/2+21, 12, MUTED, Paint.Align.CENTER);
-            c.restore(); return;
+            panel(canvas, 0, 0, w, h - 20, 14);
+            bold(canvas, failed ? "Forecast unavailable" : "Loading forecast…",
+                    w / 2, h / 2 - 4, 22, WHITE, Paint.Align.CENTER);
+            norm(canvas, failed ? "Check your connection. The launcher will retry automatically."
+                    : "Shah Alam · Open-Meteo",
+                    w / 2, h / 2 + 20, 12, MUTED, Paint.Align.CENTER);
+            canvas.restore(); return;
         }
-        float currentW = w*.25f;
-        float dailyY = h*.64f;
-        float footerY = h-7;
-        label(c, "Shah Alam", currentW/2, 24, 17, WHITE, Paint.Align.CENTER);
-        label(c, current.temp + "°", currentW/2, 76, 52, WHITE, Paint.Align.CENTER);
-        label(c, condition(current.code), currentW/2, 94, 14, MUTED, Paint.Align.CENTER);
-        label(c, "H:" + current.max + "°  L:" + current.min + "°", currentW/2, 110, 12, WHITE, Paint.Align.CENTER);
-        float hourlyL = currentW+8, hourlyR = w-14;
-        panel(c,hourlyL,12,hourlyR,dailyY-8);
-        label(c,"HOURLY FORECAST",hourlyL+14,29,10,MUTED,Paint.Align.LEFT);
-        label(c,"Next " + forecast.hours.size() + " hours",hourlyR-14,29,11,MUTED,Paint.Align.RIGHT);
-        float col = (hourlyR-hourlyL-20)/forecast.hours.size();
+
+        float upperH   = Math.min(176f, h * 0.56f);
+        float lowerT   = upperH + 10f;
+        float lowerB   = h - 20f;
+        float footerY  = h - 5f;
+
+        // ── Hero card ─────────────────────────────────────────────────────
+        float heroR = 264f;
+        panel(canvas, 0, 0, heroR, upperH, 14);
+
+        bold(canvas, "SHAH ALAM", 20, 26, 11, MUTED, Paint.Align.LEFT);
+        bold(canvas, current.temp + "°", 20, 72, 48, WHITE, Paint.Align.LEFT);
+        icon(canvas, current.code, current.day, heroR - 90, 38, 46);
+        norm(canvas, condition(current.code), 20, 94, 13, MUTED_LT, Paint.Align.LEFT);
+        norm(canvas, "H: " + current.max + "°   L: " + current.min + "°",
+                20, 112, 11, MUTED, Paint.Align.LEFT);
+
+        // Metric chips
+        float cY1 = 124, cY2 = 160;
+        float p1L = 20, p1R = p1L + 68;
+        chip(canvas, p1L, cY1, p1R, cY2);
+        bold(canvas, "FEELS", (p1L + p1R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
+        bold(canvas, current.apparentTemp + "°", (p1L + p1R) / 2, cY2 - 7, 12, WHITE, Paint.Align.CENTER);
+
+        float p2L = p1R + 7, p2R = p2L + 68;
+        chip(canvas, p2L, cY1, p2R, cY2);
+        bold(canvas, "HUMID", (p2L + p2R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
+        bold(canvas, current.humidity + "%", (p2L + p2R) / 2, cY2 - 7, 12, WHITE, Paint.Align.CENTER);
+
+        float p3L = p2R + 7, p3R = heroR - 20;
+        chip(canvas, p3L, cY1, p3R, cY2);
+        bold(canvas, "WIND", (p3L + p3R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
+        bold(canvas, current.windSpeed + " km/h", (p3L + p3R) / 2, cY2 - 7, 10.5f, WHITE, Paint.Align.CENTER);
+
+        // ── Hourly strip ──────────────────────────────────────────────────
+        float hL = heroR + 12f;
+        panel(canvas, hL, 0, w, upperH, 14);
+
+        List<Weather.Hour> hrs = forecast.hours;
+        int nH = Math.min(8, hrs.size());
+        bold(canvas, "HOURLY FORECAST", hL + 18, 25, 10, MUTED, Paint.Align.LEFT);
+        norm(canvas, "Next " + nH + " hours", w - 18, 25, 11, MUTED, Paint.Align.RIGHT);
+
+        float hW = (w - hL - 28);
+        float cW = hW / nH;
         boolean h24 = android.text.format.DateFormat.is24HourFormat(getContext());
-        DateTimeFormatter hourFormat = DateTimeFormatter.ofPattern(h24 ? "HH:mm" : "ha", Locale.UK);
-        for(int i=0;i<forecast.hours.size();i++) {
-            Weather.Hour hour = forecast.hours.get(i);
-            float x = hourlyL+10+col*(i+.5f);
-            label(c,Instant.ofEpochMilli(hour.at).atZone(JakimProvider.MALAYSIA).format(hourFormat),x,48,11,WHITE,Paint.Align.CENTER);
-            icon(c,hour.code,hour.day,x-10,57,20);
-            label(c,hour.rain > 0 ? hour.rain+"%" : "",x,89,10,RAIN,Paint.Align.CENTER);
-            label(c,hour.temp+"°",x,109,17,WHITE,Paint.Align.CENTER);
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern(h24 ? "HH:mm" : "ha", Locale.UK);
+
+        for (int i = 0; i < nH; i++) {
+            Weather.Hour hr = hrs.get(i);
+            float cx = hL + 14 + cW * (i + 0.5f);
+            String timeStr = (i == 0) ? "Now"
+                    : Instant.ofEpochMilli(hr.at).atZone(JakimProvider.MALAYSIA).format(fmt);
+
+            if (i == 0) bold(canvas, timeStr, cx, 48, 11.5f, WHITE, Paint.Align.CENTER);
+            else         norm(canvas, timeStr, cx, 48, 11.5f, WHITE, Paint.Align.CENTER);
+
+            icon(canvas, hr.code, hr.day, cx - 11, 57, 22);
+
+            if (hr.rain > 0) bold(canvas, hr.rain + "%", cx, 96, 10, RAIN_COLOR, Paint.Align.CENTER);
+            else             norm(canvas, "—", cx, 96, 10, 0x40B7D0E9, Paint.Align.CENTER);
+
+            bold(canvas, hr.temp + "°", cx, 122, 16, WHITE, Paint.Align.CENTER);
+
+            if (hr.humidity > 0)
+                norm(canvas, hr.humidity + "%", cx, 148, 10, 0xFF8EAAC5, Paint.Align.CENTER);
         }
-        panel(c,14,dailyY,w-14,h-21);
-        label(c,"5-DAY FORECAST",28,dailyY+16,10,MUTED,Paint.Align.LEFT);
-        float dayCol = (w-56)/forecast.days.size();
-        int low = Integer.MAX_VALUE, high = Integer.MIN_VALUE;
-        for(Weather.Day day:forecast.days) { low=Math.min(low,day.min); high=Math.max(high,day.max); }
+
+        // ── 5-day strip ───────────────────────────────────────────────────
+        panel(canvas, 0, lowerT, w, lowerB, 14);
+
+        List<Weather.Day> days = forecast.days;
+        int nD = Math.min(5, days.size());
+        bold(canvas, "5-DAY FORECAST", 20, lowerT + 19, 10, MUTED, Paint.Align.LEFT);
+        norm(canvas, "Daily Outlook", w - 20, lowerT + 19, 11, MUTED, Paint.Align.RIGHT);
+
+        int spanLow = Integer.MAX_VALUE, spanHigh = Integer.MIN_VALUE;
+        for (Weather.Day day : days) { spanLow = Math.min(spanLow, day.min); spanHigh = Math.max(spanHigh, day.max); }
+        float span = Math.max(1f, spanHigh - spanLow);
+
+        float dCW = (w - 24) / nD;
         LocalDate today = LocalDate.now(JakimProvider.MALAYSIA);
-        for(int i=0;i<forecast.days.size();i++) {
-            Weather.Day day=forecast.days.get(i);
-            float l=28+dayCol*i, r=l+dayCol-14;
-            LocalDate date=Instant.ofEpochMilli(day.at).atZone(JakimProvider.MALAYSIA).toLocalDate();
-            label(c,date.equals(today)?"Today":date.format(DateTimeFormatter.ofPattern("EEE",Locale.UK)),l,dailyY+33,12,WHITE,Paint.Align.LEFT);
-            icon(c,day.code,true,r-16,dailyY+21,16);
-            float y = Math.min(dailyY+49,h-29), left=l+24, right=r-23;
-            label(c,day.min+"°",l,y+4,11,MUTED,Paint.Align.LEFT);
-            label(c,day.max+"°",r,y+4,11,WHITE,Paint.Align.RIGHT);
-            surface.setColor(0x44203C58); rect.set(left,y-2,right,y+2); c.drawRoundRect(rect,2,2,surface);
-            float span=Math.max(1,high-low);
-            float fillL=left+(right-left)*(day.min-low)/span;
-            float fillR=left+(right-left)*(day.max-low)/span;
-            surface.setShader(new LinearGradient(left,0,right,0,0xFF82BDD6,0xFFE3CE76,Shader.TileMode.CLAMP)); surface.setAlpha(255);
-            rect.set(fillL,y-2,Math.max(fillL+2,fillR),y+2); c.drawRoundRect(rect,2,2,surface); surface.setShader(null);
+
+        // Pre-build bar gradient once when width is known (no allocation inside loop)
+        float barFullW = dCW - 16 - 26 - 26; // approximate inner bar width
+        if (barGradient == null || barGradW != barFullW) {
+            barGradient = new LinearGradient(0, 0, barFullW, 0,
+                    0xFF82BDD6, 0xFFE3CE76, Shader.TileMode.CLAMP);
+            barGradW = barFullW;
         }
-        String at=Instant.ofEpochMilli(forecast.updated).atZone(JakimProvider.MALAYSIA).format(DateTimeFormatter.ofPattern("HH:mm",Locale.UK));
-        label(c,(failed?"Saved forecast · ":"")+"Updated " + at + " · Open-Meteo",w/2,footerY,10,MUTED,Paint.Align.CENTER);
-        c.restore();
+
+        for (int i = 0; i < nD; i++) {
+            Weather.Day day = days.get(i);
+            float dl = 12 + dCW * i + 8;
+            float dr = dl + dCW - 16;
+
+            if (i > 0) divider(canvas, 12 + dCW * i, lowerT + 26, lowerB - 14);
+
+            LocalDate date = Instant.ofEpochMilli(day.at).atZone(JakimProvider.MALAYSIA).toLocalDate();
+            String dayName = date.equals(today) ? "Today"
+                    : date.format(DateTimeFormatter.ofPattern("EEE", Locale.UK));
+            String dateStr = date.format(DateTimeFormatter.ofPattern("d MMM", Locale.UK));
+
+            bold(canvas, dayName,  dl, lowerT + 38, 13, WHITE, Paint.Align.LEFT);
+            norm(canvas, dateStr,  dr, lowerT + 38, 10, MUTED, Paint.Align.RIGHT);
+
+            icon(canvas, day.code, true, dl, lowerT + 47, 20);
+            norm(canvas, condition(day.code), dl + 26, lowerT + 62, 11, MUTED_LT, Paint.Align.LEFT);
+
+            if (day.rainMax > 0)
+                bold(canvas, day.rainMax + "%", dr, lowerT + 62, 10, RAIN_COLOR, Paint.Align.RIGHT);
+
+            float barY = lowerB - 18f;
+            norm(canvas, day.min + "°", dl, barY + 4, 11, MUTED, Paint.Align.LEFT);
+            bold(canvas, day.max + "°", dr, barY + 4, 12, WHITE, Paint.Align.RIGHT);
+
+            float barL = dl + 25, barR = dr - 26;
+            rect.set(barL, barY - 2.5f, barR, barY + 2.5f);
+            surface.setShader(null); surface.setStyle(Paint.Style.FILL);
+            surface.setColor(0x28FFFFFF);
+            canvas.drawRoundRect(rect, 2.5f, 2.5f, surface);
+
+            float fillL = barL + (barR - barL) * (day.min - spanLow) / span;
+            float fillR = barL + (barR - barL) * (day.max - spanLow) / span;
+            fillR = Math.max(fillL + 4, fillR);
+
+            // Translate the pre-built gradient to the correct position
+            canvas.save();
+            canvas.translate(barL, 0);
+            surface.setShader(barGradient);
+            rect.set(fillL - barL, barY - 2.5f, fillR - barL, barY + 2.5f);
+            canvas.drawRoundRect(rect, 2.5f, 2.5f, surface);
+            canvas.restore();
+            surface.setShader(null);
+        }
+
+        // ── Footer ────────────────────────────────────────────────────────
+        String at = Instant.ofEpochMilli(forecast.updated)
+                .atZone(JakimProvider.MALAYSIA)
+                .format(DateTimeFormatter.ofPattern("HH:mm", Locale.UK));
+        norm(canvas, (failed ? "Saved forecast · " : "") + "Updated " + at + " · Open-Meteo",
+                w / 2, footerY, 10, MUTED, Paint.Align.CENTER);
+
+        canvas.restore();
     }
+
     static String condition(int code) {
-        if(code==0) return "Clear";
-        if(code==1||code==2) return "Partly cloudy";
-        if(code==3) return "Cloudy";
-        if(code==45||code==48) return "Fog";
-        if(code>=95) return "Thunderstorms";
-        if((code>=71&&code<=77)||code==85||code==86) return "Snow";
-        if((code>=51&&code<=67)||(code>=80&&code<=82)) return "Rain showers";
+        if (code == 0) return "Clear";
+        if (code == 1 || code == 2) return "Partly cloudy";
+        if (code == 3) return "Cloudy";
+        if (code == 45 || code == 48) return "Fog";
+        if (code >= 95) return "Thunderstorms";
+        if ((code >= 71 && code <= 77) || code == 85 || code == 86) return "Snow";
+        if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "Rain showers";
         return "Current conditions";
     }
 }
