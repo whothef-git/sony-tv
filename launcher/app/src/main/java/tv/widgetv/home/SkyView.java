@@ -20,7 +20,8 @@ import java.util.Random;
  * Full-screen wallpaper: a vertical sky gradient that follows the prayer period, stars at night, a gold
  * geometric pattern that fades out from the top, a lapis scrim over the header, and a dim layer that
  * fades in as the page scrolls to the grid. It only redraws when told to (minute tick, scroll, debug
- * hook): no animation loop. The colours crossfade over 20 minutes after each boundary, one step per minute.
+ * hook). The original colours crossfade over 20 minutes after each boundary. The approved faint
+ * living-sky overlay refreshes positions every ten seconds while resumed, without a frame-rate loop.
  */
 public final class SkyView extends View {
     private static final String TAG = Config.TAG;
@@ -50,12 +51,21 @@ public final class SkyView extends View {
     private int patternIndex = -1;
     private Bitmap tile;
     private boolean rotate;
+    private final LivingSky living=new LivingSky();
+    private final MoonCalendar moonCalendar;
+    private PrayerDay currentDay;
+    private long updatedAt;
+    private boolean running;
+    private final Runnable moveSky=new Runnable(){@Override public void run(){if(running){invalidate();postDelayed(this,10_000);}}};
+    void setRunning(boolean on){running=on;removeCallbacks(moveSky);if(on)post(moveSky);}
+    void shutdown(){setRunning(false);moonCalendar.shutdown();}
 
     /** Debug overrides (adb broadcast in debug builds); -1 means follow the clock / the config. */
     int forcedPeriod = -1, forcedPattern = -1;
 
     public SkyView(Context c, AttributeSet a) {
         super(c, a);
+        moonCalendar=new MoonCalendar(c);
         rotate = "rotate".equals(c.getString(R.string.pattern_mode));
         Random r = new Random(1448);
         for (int i = 0; i < 40; i++) {
@@ -69,6 +79,8 @@ public final class SkyView extends View {
 
     /** Called on every minute tick with the day's prayer times. */
     void update(PrayerDay day) {
+        currentDay=day;updatedAt=android.os.SystemClock.elapsedRealtime();
+        if(running)moonCalendar.maybeFetch(day.now,this::invalidate);
         long now = day.now;
         int period, prev;
         float t;
@@ -159,6 +171,10 @@ public final class SkyView extends View {
         c.drawRect(0, 0, w, h, scrim);
         // Bottom vignette: anchors the lower half in deep lapis so no sky period bleeds as a harsh band.
         c.drawRect(0, h * 0.55f, w, h, vignette);
+        if(currentDay!=null){
+            long now=currentDay.now+android.os.SystemClock.elapsedRealtime()-updatedAt;
+            living.draw(c,w,h,now,currentDay.times[PrayerDay.SUNRISE],currentDay.times[PrayerDay.MAGHRIB],moonCalendar.get(now));
+        }
         // Pattern above the scrim, so it is at full strength at the top edge and fades out by ~58%.
         if (pattern.getShader() != null) c.drawRect(0, 0, w, h * PATTERN_FADE_END, pattern);
         if (dimFraction > 0f) {

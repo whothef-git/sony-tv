@@ -232,6 +232,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        sky.setRunning(true);
         glass.setRunning(true);
         smartHome.setRunning(true);
         atmosphere.setRunning(tabIdx == 2);
@@ -247,6 +248,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        sky.setRunning(false);
         glass.setRunning(false);
         smartHome.setRunning(false);
         atmosphere.setRunning(false);
@@ -285,6 +287,7 @@ public class MainActivity extends Activity {
         getSystemService(ConnectivityManager.class).unregisterNetworkCallback(networkCallback);
         io.shutdownNow();
         weather.shutdown();
+        sky.shutdown();
         hadith.shutdown();
         smartHome.shutdown();
     }
