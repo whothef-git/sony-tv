@@ -16,9 +16,12 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Tests only the daily-hadith schedule, parser and cache. No smart-device or other screen tests. */
 public final class DailyHadithChecks extends Instrumentation {
     private int checks;
-    @Override public void onCreate(Bundle args){super.onCreate(args);start();}
+    private boolean fitOnly;
+    private boolean shortPreview;
+    @Override public void onCreate(Bundle args){super.onCreate(args);fitOnly=args!=null&&"true".equals(args.getString("fit_only"));shortPreview=args!=null&&"true".equals(args.getString("short_preview"));start();}
     private void check(boolean value,String label){if(!value)throw new AssertionError(label);checks++;}
     @Override public void onStart(){
+        if(fitOnly||shortPreview){checkAutoFit();return;}
         Bundle out=new Bundle();String file="hadith-test-"+java.util.UUID.randomUUID();
         Context context=new ContextWrapper(getTargetContext()){
             @Override public SharedPreferences getSharedPreferences(String name,int mode){return super.getSharedPreferences(file,mode);}
@@ -58,5 +61,52 @@ public final class DailyHadithChecks extends Instrumentation {
             finish(Activity.RESULT_OK,out);
         }catch(Throwable e){out.putString("stream","FAIL after "+checks+" hadith checks: "+e.getClass().getSimpleName()+": "+e.getMessage()+"\n");finish(Activity.RESULT_CANCELED,out);}
         finally{if(provider!=null)provider.shutdown();if(reloaded!=null)reloaded.shutdown();getTargetContext().deleteSharedPreferences(file);}
+    }
+    private void checkAutoFit(){
+        Bundle result=new Bundle();Activity activity=null;String original=null;
+        try{
+            DailyHadith.Entry shortEntry=shortPreview?DailyHadith.parsePage("https://myhadith.islam.gov.my/hadith/1049",DailyHadith.download("https://myhadith.islam.gov.my/hadith/1049")):null;
+            activity=startActivitySync(new android.content.Intent(getTargetContext(),MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+            Activity target=activity;
+            runOnMainSync(()->{
+                try{java.lang.reflect.Method show=MainActivity.class.getDeclaredMethod("showScreen",int.class,boolean.class);show.setAccessible(true);show.invoke(target,1,false);}
+                catch(Exception e){throw new RuntimeException(e);}
+            });
+            waitForIdleSync();android.os.SystemClock.sleep(150);
+            android.widget.TextView body=activity.findViewById(R.id.thought_text),heading=activity.findViewById(R.id.thought_tag);
+            original=body.getText().toString();float previous=Float.MAX_VALUE;
+            if(shortEntry!=null){
+                runOnMainSync(()->body.setText(shortEntry.display()));waitForIdleSync();android.os.SystemClock.sleep(250);
+                runOnMainSync(()->{
+                    android.text.Layout layout=body.getLayout();
+                    check(layout.getLineEnd(layout.getLineCount()-1)==shortEntry.display().length(),"complete short original hadith");
+                    check(layout.getHeight()<=body.getHeight()-body.getCompoundPaddingTop()-body.getCompoundPaddingBottom(),"short hadith fits");
+                    check(body.getTextSize()==body.getAutoSizeMaxTextSize(),"short hadith uses largest configured content size");
+                    check(heading.getTextSize()>body.getTextSize(),"heading stays larger");
+                });
+                Bundle preview=new Bundle();preview.putString("stream","SHORT PREVIEW READY: original MyHadith 1049; largest content font; automatically restores in 30 seconds.\n");sendStatus(0,preview);
+                android.os.SystemClock.sleep(30_000);
+            }
+            if(!shortPreview)
+            for(int words:new int[]{40,200,800,2000}){
+                StringBuilder fixture=new StringBuilder("UJIAN SUSUN ATUR\n");
+                for(int i=0;i<words;i++)fixture.append("Perkataan ujian ");
+                String text=fixture.toString();runOnMainSync(()->body.setText(text));
+                waitForIdleSync();android.os.SystemClock.sleep(150);
+                float before=previous;
+                runOnMainSync(()->{
+                    android.text.Layout layout=body.getLayout();
+                    check(layout!=null&&layout.getLineEnd(layout.getLineCount()-1)==text.length(),"complete text laid out: "+words);
+                    check(layout.getHeight()<=body.getHeight()-body.getCompoundPaddingTop()-body.getCompoundPaddingBottom(),"no vertical clipping: "+words);
+                    check(heading.getTextSize()>body.getTextSize(),"heading larger: "+words);
+                    check(body.getTextSize()<=before,"longer text never increases size: "+words);
+                    check(!(body.getParent() instanceof android.widget.ScrollView),"no scroll container");
+                });
+                previous=body.getTextSize();
+            }
+            String saved=original;runOnMainSync(()->body.setText(saved));waitForIdleSync();
+            result.putString("stream","PASS: "+checks+(shortPreview?" original short-hadith TV preview checks; daily content restored.":" TV auto-fit checks across short and long synthetic entries. No network fetch.")+" No device controls.\n");finish(Activity.RESULT_OK,result);
+        }catch(Throwable e){result.putString("stream","FAIL auto-fit after "+checks+" checks: "+e+"\n");finish(Activity.RESULT_CANCELED,result);}
+        finally{if(activity!=null&&original!=null){android.widget.TextView body=activity.findViewById(R.id.thought_text);String saved=original;runOnMainSync(()->body.setText(saved));}}
     }
 }
