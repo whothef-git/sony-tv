@@ -41,7 +41,7 @@ public final class DailyHadithChecks extends Instrumentation {
                     "<h2 class='hadith-card-title'>PARSER FIXTURE</h2><div class='arabic-text'><p>أَبْجَد</p><div>هَوَّز</div></div><div class='translation-text'><p>Exact &amp; unchanged.</p><p>Keep punctuation: ‘ ’.</p></div>");
             check(sample.arabic.contains("أَبْجَد")&&sample.arabic.contains("هَوَّز"),"nested original text and diacritics preserved");
             check(sample.translation.contains("Exact & unchanged.")&&sample.translation.contains("‘ ’"),"entities and punctuation preserved");
-            check(sample.display().contains(sample.arabic)&&sample.display().contains(sample.translation),"no paraphrase or truncation");
+            check(sample.display().equals(sample.title+"\n"+sample.translation)&&!sample.display().contains(sample.arabic),"Malay only without paraphrase or truncation");
             boolean rejected=false;try{DailyHadith.parsePage("https://myhadith.islam.gov.my/hadith/1","<h2>Incomplete</h2>");}catch(IllegalArgumentException expected){rejected=true;}
             check(rejected,"changed source format fails explicitly");
             LocalDate today=LocalDate.now(JakimProvider.MALAYSIA);

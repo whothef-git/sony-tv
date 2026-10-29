@@ -39,7 +39,7 @@ final class DailyHadith {
     static final class Entry {
         final String url,title,arabic,translation;
         Entry(String url,String title,String arabic,String translation){this.url=url;this.title=title;this.arabic=arabic;this.translation=translation;}
-        String display(){return title+"\n\nMatan\n"+arabic+"\n\nMaksud Hadith\n"+translation;}
+        String display(){return title+"\n"+translation;}
         JSONObject json() throws Exception {return new JSONObject().put("url",url).put("title",title).put("arabic",arabic).put("translation",translation);}
     }
 

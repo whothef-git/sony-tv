@@ -457,8 +457,8 @@ public class MainActivity extends Activity {
                 else if (dn) focus(Zone.TABS, tabIdx, true);
                 break;
             case TABS:
-                if (left && tabIdx > 0) focus(Zone.TABS, tabIdx - 1, true);
-                else if (right && tabIdx < ScreenTabs.LABELS.length - 1) focus(Zone.TABS, tabIdx + 1, true);
+                if (left) focus(Zone.TABS, (tabIdx + ScreenTabs.LABELS.length - 1) % ScreenTabs.LABELS.length, true);
+                else if (right) focus(Zone.TABS, (tabIdx + 1) % ScreenTabs.LABELS.length, true);
                 else if (up) focus(Zone.TOP, pillIdx, true);
                 else if (dn && tabIdx == 3) focus(Zone.SMART, 0, true);
                 else if (dn && tabIdx == 1) focus(Zone.HADITH, 0, true);
@@ -831,7 +831,7 @@ public class MainActivity extends Activity {
         // Stack below the timeline so larger text and wrapped thoughts cannot overlap.
         tp.topMargin = cfg.prayerEnabled ? dp(12) : 0;
         thought.setLayoutParams(tp);
-        thoughtTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10 + l);
+        thoughtTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20 + l);
         Typeface hadithFont = Typeface.create(getResources().getFont(R.font.alexandria), 400, false);
         thoughtTag.setTypeface(hadithFont);
         thoughtText.setTypeface(hadithFont);
@@ -955,7 +955,7 @@ public class MainActivity extends Activity {
             shownThoughtDate = today; shownHadithUrl = null; hadithScroll.scrollTo(0, 0);
         }
         thought.setVisibility(View.VISIBLE);
-        thoughtTag.setText("HADITH FOR TODAY");
+        thoughtTag.setText("HADITH OF TODAY");
         DailyHadith.Entry entry = hadith.get(today);
         if (entry != null) {
             if (!entry.url.equals(shownHadithUrl)) {
@@ -968,8 +968,7 @@ public class MainActivity extends Activity {
                     : "Memuatkan hadith asal daripada MyHadith JAKIM…");
             if (tabIdx == 1) hadith.maybeFetch(today, () -> { if (!isDestroyed()) renderHadith(); });
         }
-        thoughtSource.setText("MyHadith · JAKIM\n" + (hadith.url(today) == null ? "" : hadith.url(today))
-                + "   ·   ↓ Read / scroll   ·   Back: tabs");
+        thoughtSource.setText("MyHadith · JAKIM");
         thoughtSource.setVisibility(View.VISIBLE);
     }
 
