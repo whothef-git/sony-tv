@@ -47,7 +47,7 @@ public final class ScreenTabs extends View {
         }
         setContentDescription("Screens. " + LABELS[selected] + " selected. " +
                 (selected == 1 ? "SHAH ALAM · SGR01. " : "") +
-                (selected == 1 ? "Left or right to switch; down to read the daily hadith."
+                (selected == 1 ? "Daily hadith fits on screen. Left or right to switch; Back for Home."
                         : selected == 2 ? "Read-only forecast. Left or right to switch; Back for Home."
                         : "Left or right to switch; down for " + (selected==3?"devices.":"apps.")));
         invalidate();

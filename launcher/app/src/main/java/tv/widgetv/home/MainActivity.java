@@ -118,7 +118,6 @@ public class MainActivity extends Activity {
     /** Debug builds only: a fixed local date for the thought of the day (adb fake_date), or null. */
     private LocalDate fakeDate;
     private DailyHadith hadith;
-    private ScrollView hadithScroll;
     private String shownHadithUrl;
     private View hereWeather, thought;
     private ImageView awayFlag;
@@ -150,7 +149,6 @@ public class MainActivity extends Activity {
         thoughtTag = findViewById(R.id.thought_tag);
         thoughtText = findViewById(R.id.thought_text);
         thoughtSource = findViewById(R.id.thought_source);
-        hadithScroll = findViewById(R.id.hadith_scroll);
         hadith = new DailyHadith(this);
         cfg = Config.get(this);
         header = findViewById(R.id.header);
@@ -461,14 +459,13 @@ public class MainActivity extends Activity {
                 else if (right) focus(Zone.TABS, (tabIdx + 1) % ScreenTabs.LABELS.length, true);
                 else if (up) focus(Zone.TOP, pillIdx, true);
                 else if (dn && tabIdx == 3) focus(Zone.SMART, 0, true);
-                else if (dn && tabIdx == 1) focus(Zone.HADITH, 0, true);
+                else if (dn && tabIdx == 1) break; // The complete hadith fits; no scroll zone.
                 else if (dn && tabIdx == 2) break; // Weather uses the dock area; never focus hidden apps.
                 else if (dn && dockN > 0) focus(Zone.DOCK, clamp(dockIdx, dockN), true);
                 else if (dn && gridN > 0) focus(Zone.GRID, clamp(gridIdx, gridN), true);
                 break;
             case HADITH:
-                if (up && hadithScroll.getScrollY() == 0 || left || right) focus(Zone.TABS, 1, true);
-                else if (up || dn) hadithScroll.smoothScrollBy(0, (up ? -1 : 1) * Math.max(dp(80), hadithScroll.getHeight() * 2 / 3));
+                focus(Zone.TABS, 1, true);
                 break;
             case SMART:
                 if (smartHome.move(code)) focus(Zone.TABS, 3, true);
@@ -556,7 +553,7 @@ public class MainActivity extends Activity {
             case TOP: return pills[pillIdx];
             case TABS: return screenTabs;
             case SMART: return smartHome.selectedView();
-            case HADITH: return hadithScroll;
+            case HADITH: return thoughtText;
             case DOCK: return dockList.getLayoutManager().findViewByPosition(dockIdx);
             case GRID: return gridList.getLayoutManager().findViewByPosition(gridIdx);
             case MENU: return menu.getChildAt(menuIdx);
@@ -839,7 +836,7 @@ public class MainActivity extends Activity {
         thoughtTag.setFontVariationSettings("'wght' 400");
         thoughtText.setFontVariationSettings("'wght' 400");
         thoughtSource.setFontVariationSettings("'wght' 400");
-        thoughtText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16 + l);
+        thoughtText.setAutoSizeTextTypeUniformWithConfiguration(1, 16 + l, 1, TypedValue.COMPLEX_UNIT_SP);
         thoughtSource.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9 + l);
         if (day != null) renderDateAndWeather();
     }
@@ -952,16 +949,15 @@ public class MainActivity extends Activity {
         LocalDate today = fakeDate != null ? fakeDate
                 : java.time.Instant.ofEpochMilli(nowMillis()).atZone(JakimProvider.MALAYSIA).toLocalDate();
         if (!today.equals(shownThoughtDate)) {
-            shownThoughtDate = today; shownHadithUrl = null; hadithScroll.scrollTo(0, 0);
+            shownThoughtDate = today; shownHadithUrl = null;
         }
         thought.setVisibility(View.VISIBLE);
-        thoughtTag.setText("HADITH OF TODAY");
+        thoughtTag.setText("HADITH OF THE DAY");
         DailyHadith.Entry entry = hadith.get(today);
         if (entry != null) {
             if (!entry.url.equals(shownHadithUrl)) {
                 thoughtText.setText(entry.display());
                 shownHadithUrl = entry.url;
-                hadithScroll.scrollTo(0, 0);
             }
         } else {
             thoughtText.setText(hadith.failed() ? "Hadith hari ini belum dapat dimuatkan. Sila semak sambungan Internet."
