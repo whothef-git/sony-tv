@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
     private SkyView sky;
     private PrayerTimeline timeline;
     private GlassHighlight glass;
-    private TextView clock, awayClock, date, ssid;
+    private TextView clock, clockSeconds, awayClock, date, ssid;
     private ImageView[] pills; // the three round buttons: Inputs, Wi-Fi, Settings
     private Typeface ui, quranFont;
     private LinearLayout menu;
@@ -137,7 +137,10 @@ public class MainActivity extends Activity {
         timeline = findViewById(R.id.timeline);
         glass = findViewById(R.id.glass);
         clock = findViewById(R.id.clock);
+        clockSeconds = findViewById(R.id.clock_seconds);
+        ((RollingTimeView)clockSeconds).setAlternatingDirection(true);
         awayClock = findViewById(R.id.away_clock);
+        ((RollingTimeView)awayClock).setAlternatingDirection(true);
         ssid = findViewById(R.id.ssid);
         hereWeather = findViewById(R.id.here_weather);
         hereTemp = findViewById(R.id.here_temp);
@@ -240,6 +243,11 @@ public class MainActivity extends Activity {
         timeFilter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         register(timeReceiver, timeFilter, false);
         updateClock(); // also the weather stale check
+        ((RollingTimeView)clock).setMotionEnabled(true);
+        ((RollingTimeView)clockSeconds).setMotionEnabled(true);
+        ((RollingTimeView)awayClock).setMotionEnabled(true);
+        main.removeCallbacks(secondTick);
+        secondTick.run();
         loadApps(false);
     }
 
@@ -247,6 +255,10 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        main.removeCallbacks(secondTick);
+        ((RollingTimeView)clock).setMotionEnabled(false);
+        ((RollingTimeView)clockSeconds).setMotionEnabled(false);
+        ((RollingTimeView)awayClock).setMotionEnabled(false);
         sky.setRunning(false);
         glass.setRunning(false);
         smartHome.setRunning(false);
@@ -610,7 +622,33 @@ public class MainActivity extends Activity {
     }
 
     /** Re-place the ring after any layout pass (data loaded, SSID text width changed, menu shown). */
+    private String clockFitKey;
     private void onLayoutChanged() {
+        float timeBaseline=clock.getTop()+clock.getBaseline();
+        clockSeconds.setTranslationY(timeBaseline-clockSeconds.getTop()-clockSeconds.getBaseline());
+        hereWeather.setTranslationY(timeBaseline-hereWeather.getTop()-hereTemp.getTop()-hereTemp.getBaseline());
+        // Align the existing weather row with the end of the first date paragraph (the Hijri year).
+        if(date.getLayout()!=null&&hereWeather.getVisibility()==View.VISIBLE){
+            int end=date.getText().toString().indexOf('\n');
+            if(end<0)end=date.length();
+            float dateRight=date.getLeft()+date.getCompoundPaddingLeft()+date.getLayout().getPrimaryHorizontal(end);
+            // Fit fixed digit slots only when header content/font changes, never on a seconds tick.
+            String fitKey=date.getText().subSequence(0,end)+"|"+dateRight+"|"+clockSeconds.getWidth()
+                    +"|"+hereWeather.getWidth()+"|"+clock.getTextSize()+"|"+clock.getTypeface();
+            if(!fitKey.equals(clockFitKey)){
+                android.text.TextPaint measure=new android.text.TextPaint(clock.getPaint());
+                measure.setTextScaleX(1);
+                float natural=measure.measureText("88:88")+dp(2);
+                int available=Math.max(dp(100),(int)Math.floor(dateRight-clock.getLeft()-clockSeconds.getWidth()-hereWeather.getWidth()-dp(2)));
+                clockFitKey=fitKey;
+                clock.setTextScaleX(Math.min(1,(available-2)/Math.max(1,natural)));
+                ViewGroup.LayoutParams slot=clock.getLayoutParams();
+                if(slot.width!=available){slot.width=available;clock.setLayoutParams(slot);}
+            }
+            float weatherRight=((View)hereWeather.getParent()).getLeft()+hereWeather.getRight();
+            hereWeather.setTranslationX(Math.max(0,dateRight-weatherRight));
+        }
+
         int tabsTop = header.getBottom() + dp(2);
         FrameLayout.LayoutParams nav = (FrameLayout.LayoutParams) screenTabs.getLayoutParams();
         if (header.getHeight() > 0 && nav.topMargin != tabsTop) {
@@ -773,17 +811,29 @@ public class MainActivity extends Activity {
 
     /** Clocks + prayer day + date line + thought, without the weather stale check. */
     private void renderClocks() {
-        clock.setText(hm(nowZoned(), DateFormat.is24HourFormat(this)));
+        renderLocalTime(nowZoned(), DateFormat.is24HourFormat(this));
         refreshPrayer();
     }
 
     private void updateClock() {
         boolean h24 = DateFormat.is24HourFormat(this);
         ZonedDateTime local = nowZoned();
-        clock.setText(hm(local, h24));
+        renderLocalTime(local,h24);
         refreshPrayer(); // also redraws the date line and the second-clock line
         weather.maybeFetch(false, this::renderDateAndWeather);
         JakimProvider.maybeRefresh(this, () -> { if (resumed) refreshPrayer(); });
+    }
+
+    /** A lightweight wall-clock tick: no prayer, weather or smart-device refresh each second. */
+    private final Runnable secondTick=new Runnable(){@Override public void run(){
+        if(!resumed)return;
+        renderLocalTime(nowZoned(),DateFormat.is24HourFormat(MainActivity.this));
+        main.postDelayed(this,1000-Math.floorMod(System.currentTimeMillis(),1000));
+    }};
+    private void renderLocalTime(ZonedDateTime local,boolean h24){
+        String time=hm(local,h24),seconds=String.format(Locale.US,":%02d",local.getSecond());
+        if(!time.contentEquals(clock.getText()))clock.setText(time);
+        if(!seconds.contentEquals(clockSeconds.getText()))clockSeconds.setText(seconds);
     }
 
     /** "12:30" (or "00:30" in 24-hour mode), no AM/PM. */
@@ -814,6 +864,11 @@ public class MainActivity extends Activity {
         int l = PrayerPrefs.textSize(this);
         float[] hereT = {24, 28, 32}, dateT = {11, 12, 13}, awayT = {22, 26, 30}, awayR = {13, 15, 17};
         hereTemp.setTextSize(TypedValue.COMPLEX_UNIT_SP, hereT[l]);
+        clockSeconds.setTextSize(TypedValue.COMPLEX_UNIT_SP, hereT[l]);
+        ViewGroup.LayoutParams secondsSlot=clockSeconds.getLayoutParams();
+        secondsSlot.width=(int)Math.ceil(clockSeconds.getPaint().measureText(":88"))+dp(2);
+        clockSeconds.setLayoutParams(secondsSlot);
+        clockFitKey=null;
         date.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         awayClock.setTextSize(TypedValue.COMPLEX_UNIT_SP, awayT[l]);
         awayTemp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
@@ -845,10 +900,15 @@ public class MainActivity extends Activity {
     }
 
     private void applyClockFont() {
+        clockFitKey=null;
+        clock.setEllipsize(null);
+        clockSeconds.setEllipsize(null);
         boolean outfit = PrayerPrefs.clockFont(this) == 1;
         Typeface tf = getResources().getFont(outfit ? R.font.outfit : R.font.cormorant_garamond);
         clock.setTypeface(tf);
         clock.setFontVariationSettings(outfit ? "'wght' 200" : "'wght' 300");
+        clockSeconds.setTypeface(tf);
+        clockSeconds.setFontVariationSettings(outfit ? "'wght' 200" : "'wght' 300");
         awayClock.setTypeface(tf);
         awayClock.setFontVariationSettings(outfit ? "'wght' 300" : "'wght' 500");
         // Temperatures in the clock family: light beside the main clock, as heavy as the second-clock time beside it.
@@ -860,7 +920,10 @@ public class MainActivity extends Activity {
         awayRange.setTypeface(weatherFont);
         awayRange.setFontVariationSettings("'wght' 400");
         // Cormorant's default figures are old-style (x-height); clocks want lining figures.
-        for (TextView t : new TextView[]{clock, awayClock, hereTemp, awayTemp}) t.setFontFeatureSettings("lnum");
+        for (TextView t : new TextView[]{clock, clockSeconds, awayClock, hereTemp, awayTemp}) t.setFontFeatureSettings("lnum");
+        clock.setFontFeatureSettings("lnum, tnum");
+        clockSeconds.setFontFeatureSettings("lnum, tnum");
+        awayClock.setFontFeatureSettings("lnum, tnum");
     }
 
     /**
@@ -888,7 +951,8 @@ public class MainActivity extends Activity {
         ZonedDateTime away = local.withZoneSameInstant(cfg.secondZone);
         String weekday = away.toLocalDate().equals(local.toLocalDate()) ? ""
                 : away.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.UK) + " ";
-        awayClock.setText(weekday + hmAmPm(away, h24));
+        String awayTime=weekday+hmAmPm(away,h24);
+        if(!awayTime.contentEquals(awayClock.getText()))awayClock.setText(awayTime);
 
         SpannableStringBuilder sb = new SpannableStringBuilder();
         append(sb, DateFormat.format("EEEE d MMMM", nowMillis()), Lapis.PLASTER_100);

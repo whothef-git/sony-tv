@@ -1,0 +1,19 @@
+# Local clock with seconds
+
+The local header shows large hours/minutes with smaller `:ss` on the same visual baseline. Seconds use the configured current-temperature text size (24sp at Normal), clock font and weight. The main clock retains its 75sp height. Tabular digits and a reserved seconds width keep the row stable as digits change.
+
+`RollingTimeView` gently shifts and crossfades only changed digits over 240ms. Travel is limited to three scaled display units, with no hard rectangular clipping window or background panel. Whole outgoing/incoming glyphs fade through the transition instead of being sliced at the top or bottom. Animation frames stop when the transition finishes, and the second tick is removed when the activity pauses. The one-second callback only updates the local time: prayer, weather and smart-device refresh schedules are unchanged. Hours, minutes and seconds are read from the same timestamp, with existing 12/24-hour support.
+
+The approved local seconds alternate upward and downward on successive changes. The Saudi clock uses the same alternating transition when its displayed minute changes, preserving its existing hours/minutes, weekday and optional am/pm format. Its current font and configured size are retained, with tabular digits for stable width. Direction follows the last numeric time digit rather than a weekday or am/pm suffix. Repeated identical text does not restart an animation; animation is disabled when the activity pauses and no animation frames are posted while the clock is hidden in Smart Home.
+
+An eight-second recording of the installed normal build captured the real Saudi minute change from 21:37 to 21:38. Frame inspection confirmed the whole-digit fade/shift with the flag and remaining clock characters staying in place; no system-clock simulation was used for this recording.
+
+The local weather icon and temperature remain beside the clock. Their right edge aligns with the end of the first date paragraph, normally the Hijri year. Compact spacing and a bounded horizontal clock fit prevent overlap when that line is short. The original clock height, date position, tab position and wallpaper moon are retained.
+
+Clock and seconds occupy fixed-width slots. Header fitting uses an independent paint measurement and is cached until the date/font/weather dimensions change, preventing per-second fit changes and transient ellipses. Resting and moving digits share the same rendering path.
+
+On 31 October 2026, all 14 `ClockHeaderChecks` passed on the Sony TV. The checks cover running seconds, current text sizes, single-line display, visual baseline, weather alignment, stable tab position and the Saudi animated view/unchanged hours-minutes format. End-of-day and 12-hour-format checks use temporary view fixtures, restored immediately to real time; the system clock and smart-device controls are untouched. Build the checks with `:app:assembleDebugAndroidTest -PtestRunner=tv.widgetv.home.ClockHeaderChecks`.
+
+A subsequent five-second video exposed blinking that those state checks did not catch. After fixing the digit slots and rendering path, a new five-second recording contained 295 frames with zero bounding-box movement in the unchanged hours/minutes region and zero large inter-frame brightness changes (threshold: 100 bright pixels). The earlier recording had 19 such brightness changes and briefly replaced minute digits with dots. This is a focused visual regression check, not a claim that every possible clock transition has been exhaustively tested.
+
+A further four-second TV recording revealed the outgoing digit being sliced against the old roll window, producing a box-like fragment. Removing the hard clip and using a short upward crossfade resolved that shape in the inspected transition frames from seconds 3–4. The new recording contained 237 frames; the unchanged large clock again had zero bounding-box movement and zero large brightness changes.

@@ -73,20 +73,31 @@
                             android:clipChildren="false"
                             android:orientation="horizontal">
 
-                            <TextView
+                            <tv.widgetv.home.RollingTimeView
                                 android:id="@+id/clock"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
+                                android:singleLine="true"
                                 android:includeFontPadding="false"
                                 android:letterSpacing="-0.02"
                                 android:textColor="@color/plaster_100"
                                 android:textSize="75sp" />
 
+                            <tv.widgetv.home.RollingTimeView
+                                android:id="@+id/clock_seconds"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="0dp"
+                                android:includeFontPadding="false"
+                                android:singleLine="true"
+                                android:textColor="@color/plaster_100"
+                                android:textSize="24sp" />
+
                             <LinearLayout
                                 android:id="@+id/here_weather"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
+                                android:layout_marginStart="2dp"
                                 android:baselineAlignedChildIndex="0"
                                 android:orientation="vertical"
                                 android:visibility="gone">
@@ -181,10 +192,11 @@
                                 android:importantForAccessibility="no"
                                 android:src="@drawable/flag_ca" />
 
-                            <TextView
+                            <tv.widgetv.home.RollingTimeView
                                 android:id="@+id/away_clock"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
+                                android:singleLine="true"
                                 android:includeFontPadding="false"
                                 android:textColor="@color/mist_400"
                                 android:textSize="22sp" />
