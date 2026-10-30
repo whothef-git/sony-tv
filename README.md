@@ -8,7 +8,7 @@ Use the TV remote to move between **Home**, **Prayer Time**, **Weather** and **S
 
 ## What's new in v3
 
-- **Living sky:** a subtle clear-sky tint, translucent sun and moon, soft halos and horizon fades over the original geometric wallpaper. Daily moon illumination and waxing/waning orientation come from the official USNO calendar.
+- **Living sky:** a subtle clear-sky tint, translucent sun and moon, soft halos and horizon fades over the original geometric wallpaper. Time-specific moon illumination and waxing/waning orientation come from USNO, refreshed every fifteen minutes while visible.
 - **Quran verses by prayer time:** Arabic and original Malay translation from Mengaji.my, changing at each of the five official JAKIM prayer times. Text automatically fits the available space; no verse collection is bundled.
 - **Expanded Weather screen:** current temperature, feels-like temperature, humidity and wind, up to eight upcoming hourly forecasts and a five-day outlook.
 - **Dynamic ambient app lighting:** the focused app's colors illuminate the dock with smooth focus transitions.
@@ -24,9 +24,9 @@ Use the TV remote to move between **Home**, **Prayer Time**, **Weather** and **S
 
 Local and secondary-city clocks, Gregorian and Malay Hijri dates, weather summaries, system shortcuts and an app dock sit over a geometric sky background. Choose four dock apps and open the remaining apps from the grid. Inputs, Wi-Fi and Settings remain accessible from the remote.
 
-The living sky preserves the existing wallpaper and layout. The sun follows configured local sunrise and sunset timing. The moon moves along a decorative night arc; its position is an ambient illustration, not an astronomical altitude or moonrise prediction. Its illuminated fraction and phase orientation use the current local date's official calendar response.
+The living sky preserves the existing wallpaper and layout. The sun follows configured local sunrise and sunset timing. The moon moves along a decorative night arc; its position is an ambient illustration, not an astronomical altitude or moonrise prediction. Its illuminated fraction and phase orientation use an official USNO response for the current UTC date and time, refreshed in fifteen-minute intervals.
 
-The current day's moon data is cached privately. If it is unavailable, the moon is omitted until it loads; the sun and wallpaper continue working offline. Position updates run while the launcher is visible and stop when paused. See [living-sky behavior and checks](docs/living-sky.md).
+Recent moon data is cached privately for up to thirty minutes. If a fresh value is unavailable, the moon is omitted until it loads; the sun and wallpaper continue working offline. Position updates run while the launcher is visible and stop when paused. See [living-sky behavior and checks](docs/living-sky.md).
 
 ### Prayer Time
 
@@ -146,7 +146,7 @@ There is no external backend requirement or analytics integration. Network use d
 | Weather | Open-Meteo, with configured city coordinates |
 | Official prayer schedule | JAKIM schedule provider |
 | Arabic Quran verse / Malay translation | `api.mengaji.my` |
-| Daily moon phase | `aa.usno.navy.mil` |
+| Time-specific moon phase | `aa.usno.navy.mil` |
 | GO DAIKIN | Account authentication and device cloud API |
 | Tapo/Kasa | Discovery and control on the local network |
 

@@ -24,6 +24,15 @@ public final class LivingSkyChecks extends Instrumentation {
     private void rejects(String data,LocalDate date,String label)throws Exception{
         boolean rejected=false;try{MoonCalendar.parse(data,date);}catch(Exception expected){rejected=true;}check(rejected,label);
     }
+    private String instantFixture(long at,String phase,Object percent)throws Exception{
+        java.time.ZonedDateTime utc=java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneOffset.UTC);
+        JSONObject data=new JSONObject().put("year",utc.getYear()).put("month",utc.getMonthValue()).put("day",utc.getDayOfMonth())
+                .put("time",utc.toLocalTime().toString()).put("tz",0).put("moon_phase",phase).put("moon_illum",percent);
+        return new JSONObject().put("properties",data).toString();
+    }
+    private void rejectsInstant(String raw,long at,String label)throws Exception{
+        boolean rejected=false;try{MoonCalendar.parseAt(raw,at);}catch(Exception expected){rejected=true;}check(rejected,label);
+    }
     @Override public void onStart(){
         Bundle result=new Bundle();String file="sky-test-"+java.util.UUID.randomUUID();MoonCalendar provider=null,reloaded=null;
         Context context=new ContextWrapper(getTargetContext()){
@@ -46,7 +55,8 @@ public final class LivingSkyChecks extends Instrumentation {
             check(LivingSky.sunProgress(rise,rise,set)==0&&LivingSky.sunProgress(set,rise,set)==1,"sun follows rise and set");
             check(LivingSky.sunProgress(13*3_600_000L,rise,set)==.5f,"midday arc midpoint");
             check(LivingSky.nightProgress(25*3_600_000L,rise,set)==.5f,"night arc crosses midnight");
-            LivingSky renderer=new LivingSky();Bitmap image=Bitmap.createBitmap(1920,1080,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(image);
+            check(LivingSky.MOON_DIAMETER==90&&LivingSky.SUN_DIAMETER==92,"preview diameters increased by ten pixels");
+            LivingSky renderer=new LivingSky(context);Bitmap image=Bitmap.createBitmap(1920,1080,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(image);
             image.eraseColor(0xFF0B192D);renderer.draw(canvas,1920,1080,13*3_600_000L,rise,set,null);
             int sun=image.getPixel(975,430),sky=image.getPixel(1800,700);
             check(Color.red(sun)>110&&Color.red(sun)<180,"sun remains translucent at 50 percent");
@@ -54,15 +64,30 @@ public final class LivingSkyChecks extends Instrumentation {
             image.eraseColor(0xFF0B192D);renderer.draw(canvas,1920,1080,25*3_600_000L,rise,set,waning);
             check(Color.red(image.getPixel(965,430))>40,"calendar moon renders on night arc");
             image.recycle();
-            provider=new MoonCalendar(context);String url=provider.url(System.currentTimeMillis());
-            check(url.startsWith("https://aa.usno.navy.mil/api/rstt/oneday?"),"official HTTPS calendar endpoint");
-            context.getSharedPreferences("moon_calendar",Context.MODE_PRIVATE).edit().putString("url",url).putString("response",fixture(today,"Waning Gibbous","88%")).commit();
+            long now=System.currentTimeMillis(),at=MoonCalendar.bucket(now);
+            provider=new MoonCalendar(context);String url=provider.url(now);
+            check(url.startsWith("https://aa.usno.navy.mil/api/celnav?"),"documented time-specific HTTPS endpoint");
+            check(url.contains("time="),"UTC time included in request");
+            MoonCalendar.Entry instant=MoonCalendar.parseAt(instantFixture(at,"Waning Gibbous",74),at);
+            check(Math.abs(instant.illuminated-.74f)<.0001f&&!instant.waxing,"time-specific percent parsed");
+            check(MoonCalendar.bucket(at+14*60_000L)==at&&MoonCalendar.bucket(at+15*60_000L)!=at,"fifteen-minute request buckets");
+            rejectsInstant(instantFixture(at-60_000L,"Waning Gibbous",74),at,"wrong response instant rejected");
+            rejectsInstant(instantFixture(at,"Unknown",74),at,"unknown instant phase rejected");
+            for(Object invalid:new Object[]{-1,101,"74%",JSONObject.NULL})
+                rejectsInstant(instantFixture(at,"Waning Gibbous",invalid),at,"invalid instant illumination rejected: "+invalid);
+            context.getSharedPreferences("moon_calendar",Context.MODE_PRIVATE).edit().putString("instant_url",url)
+                .putLong("instant_at",at).putString("instant_response",instantFixture(at,"Waning Gibbous",74)).commit();
             reloaded=new MoonCalendar(context);
-            check(reloaded.get(System.currentTimeMillis())!=null,"daily phase restored offline");
-            check(reloaded.get(System.currentTimeMillis()+86_400_000L)==null,"previous day's phase not substituted");
-            MoonCalendar.Entry live=MoonCalendar.parse(MoonCalendar.download(url),today);
-            check(live.date.equals(today)&&live.illuminated>=0&&live.illuminated<=1,"real official calendar response verified on TV");
-            result.putString("stream","PASS: "+checks+" wallpaper checks, including official calendar HTTPS on TV. No device controls tested.\n");finish(Activity.RESULT_OK,result);
+            check(reloaded.get(now)!=null,"recent instant restored offline");
+            check(reloaded.get(at+MoonCalendar.MAX_AGE_MS-1)!=null,"recent snapshot retained during refresh");
+            check(reloaded.get(at+MoonCalendar.MAX_AGE_MS)==null,"thirty-minute stale snapshot rejected");
+            check(reloaded.get(at-1)==null,"future cache rejected after clock moves backward");
+            long midnight=java.time.ZonedDateTime.of(2026,10,31,0,0,0,0,java.time.ZoneId.of("Asia/Kuala_Lumpur")).toInstant().toEpochMilli();
+            check(provider.url(midnight).contains("date=2026-10-30&time=16:00:00"),"Malaysia midnight maps to previous UTC date");
+            MoonCalendar.Entry live=MoonCalendar.parseAt(MoonCalendar.download(url),at);
+            check(live.date.equals(today)&&live.illuminated>=0&&live.illuminated<=1,"real time-specific HTTPS response verified on TV");
+            result.putString("current_illumination",Math.round(live.illuminated*100)+"% "+live.phase);
+            result.putString("stream","PASS: "+checks+" wallpaper checks, including time-specific official calendar HTTPS on TV; current illumination: "+Math.round(live.illuminated*100)+"%. No device controls tested.\n");finish(Activity.RESULT_OK,result);
         }catch(Throwable e){result.putString("stream","FAIL after "+checks+" wallpaper checks: "+e+"\n");finish(Activity.RESULT_CANCELED,result);}
         finally{if(provider!=null)provider.shutdown();if(reloaded!=null)reloaded.shutdown();getTargetContext().deleteSharedPreferences(file);}
     }

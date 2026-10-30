@@ -8,27 +8,47 @@ import android.graphics.RadialGradient;
 import android.graphics.LinearGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
-import java.util.Random;
+import android.content.Context;
+import android.graphics.BitmapFactory;
+import android.graphics.Rect;
+import android.graphics.Typeface;
 
 /** Approved clear-sky treatment. Celestial objects have independent opacity from the faint sky tint. */
 final class LivingSky {
     static final int SKY_ALPHA=38,CELESTIAL_ALPHA=128; // 15% and 50%.
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint phaseLabel=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Rect labelBounds=new Rect();
     private final Bitmap texture=Bitmap.createBitmap(160,160,Bitmap.Config.ARGB_8888);
     private final Bitmap moon=Bitmap.createBitmap(160,160,Bitmap.Config.ARGB_8888);
     private float lastIllumination=-1;
     private boolean lastWaxing;
     private int lastTint=-1;
     private Shader tint;
-    private final Shader sun=new RadialGradient(-10,-12,64,new int[]{0xFFFFF8DF,0xFFFFE3A4,0xFFF8C275},null,Shader.TileMode.CLAMP);
+    static final float MOON_DIAMETER=90, SUN_DIAMETER=92;
+    private final Bitmap solar;
     private final Shader sunHalo=new RadialGradient(0,0,190,new int[]{0x1CFFE0A0,0x00FFE0A0},null,Shader.TileMode.CLAMP);
     private final Shader moonHalo=new RadialGradient(0,0,200,new int[]{0x1397B5DA,0x0097B5DA},null,Shader.TileMode.CLAMP);
-    LivingSky(){
-        Canvas c=new Canvas(texture);Random r=new Random(441);
-        paint.setShader(new RadialGradient(56,44,116,new int[]{0xFFF1F0DF,0xFFD1D6D8,0xFF879BAD},null,Shader.TileMode.CLAMP));
-        c.drawCircle(80,80,77,paint);paint.setShader(null);
-        c.save();Path circle=new Path();circle.addCircle(80,80,77,Path.Direction.CW);c.clipPath(circle);
-        for(int i=0;i<95;i++){paint.setColor(i%3==0?0x26536C83:0x1850677A);c.drawCircle(r.nextFloat()*160,r.nextFloat()*160,2+r.nextFloat()*10,paint);}c.restore();
+    LivingSky(Context context){
+        paint.setFilterBitmap(true);
+        phaseLabel.setTypeface(Typeface.create(context.getResources().getFont(R.font.outfit),400,false));
+        phaseLabel.setTextSize(14);
+        phaseLabel.setTextAlign(Paint.Align.CENTER);
+        phaseLabel.setColor(0xFFA5B4CA);
+        loadDisc(context,R.drawable.lunar_surface,texture,.03f,.97f);
+        solar=Bitmap.createBitmap(160,160,Bitmap.Config.ARGB_8888);
+        loadDisc(context,R.drawable.solar_surface,solar,.063f,.937f);
+    }
+    /** Decode once at a bounded size; a circular clip prevents any oval or rectangular edge. */
+    private void loadDisc(Context context,int resource,Bitmap target,float start,float end){
+        BitmapFactory.Options options=new BitmapFactory.Options();
+        options.inScaled=false;options.inSampleSize=4;
+        Bitmap source=BitmapFactory.decodeResource(context.getResources(),resource,options);
+        Canvas canvas=new Canvas(target);Path disc=new Path();disc.addCircle(80,80,80,Path.Direction.CW);
+        canvas.clipPath(disc);
+        canvas.drawBitmap(source,new Rect(Math.round(source.getWidth()*start),Math.round(source.getHeight()*start),
+                Math.round(source.getWidth()*end),Math.round(source.getHeight()*end)),new RectF(0,0,160,160),paint);
+        source.recycle();
     }
     static float sunProgress(long now,long rise,long set){return (now-rise)/(float)(set-rise);}
     static float nightProgress(long now,long rise,long set){
@@ -40,14 +60,19 @@ final class LivingSky {
     private void phase(MoonCalendar.Entry entry){
         if(lastIllumination==entry.illuminated&&lastWaxing==entry.waxing)return;
         lastIllumination=entry.illuminated;lastWaxing=entry.waxing;
-        moon.eraseColor(0);Canvas c=new Canvas(moon);paint.setColor(0xFFFFFFFF);paint.setAlpha(255);paint.setShader(null);c.drawBitmap(texture,0,0,paint);
-        paint.setColor(0xFA09172B);
-        for(int row=3;row<157;row++){
-            double yn=(row+.5-80)/77.0;float span=(float)Math.sqrt(Math.max(0,1-yn*yn))*77;
-            float edge=80+terminator(entry.illuminated,entry.waxing)*span;
-            if(entry.waxing)c.drawRect(80-span,row,edge,row+1,paint);
-            else c.drawRect(edge,row,80+span,row+1,paint);
+        int[] pixels=new int[160*160];texture.getPixels(pixels,0,160,0,0,160,160);
+        float lightZ=2*entry.illuminated-1;
+        float lightX=(entry.waxing?1:-1)*(float)Math.sqrt(Math.max(0,1-lightZ*lightZ));
+        for(int row=0;row<160;row++)for(int col=0;col<160;col++){
+            float x=(col+.5f-80)/80,y=(row+.5f-80)/80,r2=x*x+y*y;
+            int index=row*160+col,color=pixels[index];
+            if(r2>1){pixels[index]=0;continue;}
+            float light=x*lightX+(float)Math.sqrt(1-r2)*lightZ;
+            float brightness=.06f+.94f*(float)Math.sqrt(Math.max(0,light));
+            pixels[index]=(color&0xFF000000)|((int)(((color>>16)&255)*brightness)<<16)
+                    |((int)(((color>>8)&255)*brightness)<<8)|(int)((color&255)*brightness);
         }
+        moon.setPixels(pixels,0,160,0,0,160,160);
     }
     private void buildTint(float hour){
         int bucket=Math.round(hour*60);if(bucket==lastTint)return;lastTint=bucket;
@@ -74,8 +99,13 @@ final class LivingSky {
             c.save();c.translate(x,y);
             paint.setAlpha(Math.round(edge*255));paint.setShader(daytime?sunHalo:moonHalo);c.drawCircle(0,0,daytime?190:200,paint);paint.setShader(null);
             paint.setAlpha(Math.round(edge*CELESTIAL_ALPHA));
-            if(daytime){paint.setShader(sun);c.drawCircle(0,0,41,paint);paint.setShader(null);}
-            else c.drawBitmap(moon,null,new RectF(-40,-40,40,40),paint);
+            float radius=(daytime?SUN_DIAMETER:MOON_DIAMETER)/2;
+            c.drawBitmap(daytime?solar:moon,null,new RectF(-radius,-radius,radius,radius),paint);
+            if(!daytime){
+                phaseLabel.setAlpha(Math.round(edge*255*.7f));
+                phaseLabel.getTextBounds(entry.phase,0,entry.phase.length(),labelBounds);
+                c.drawText(entry.phase,0,radius+8-labelBounds.top,phaseLabel);
+            }
             paint.setAlpha(255);c.restore();
         }
         c.restore();
