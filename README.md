@@ -1,20 +1,20 @@
 # Octahedron v3
 
-A calm, widget-first Android TV launcher with a living sky, local and world clocks, official JAKIM prayer times, a daily Malay hadith, expanded weather forecasts and integrated smart-home controls. Built on WidgeTV and customized for Sony BRAVIA.
+A calm, widget-first Android TV launcher with a living sky, local and world clocks, official JAKIM prayer times, Arabic Quran verses with Malay translation, expanded weather forecasts and integrated smart-home controls. Built on WidgeTV and customized for Sony BRAVIA.
 
 Use the TV remote to move between **Home**, **Prayer Time**, **Weather** and **Smart Home**. Screen-tab navigation wraps from the last tab to the first and back.
 
-*Fresh screenshots of all four screens appear below, captured on Sony BRAVIA running Octahedron v3.0 (version code 13) on 30 October 2026. Device states, forecasts and daily content reflect the capture time.*
+*Screenshots below were captured on Sony BRAVIA running Octahedron v3.0 (version code 13) on 30–31 October 2026. Prayer Time shows the current Quran-card preview; device states, forecasts and content reflect the capture time.*
 
 ## What's new in v3
 
 - **Living sky:** a subtle clear-sky tint, translucent sun and moon, soft halos and horizon fades over the original geometric wallpaper. Daily moon illumination and waxing/waning orientation come from the official USNO calendar.
-- **Daily Malay hadith:** a 365-entry schedule of official JAKIM MyHadith pages, with the original title and complete Malay meaning on the Prayer Time screen. Text automatically fits the available space.
+- **Quran verses by prayer time:** Arabic and original Malay translation from Mengaji.my, changing at each of the five official JAKIM prayer times. Text automatically fits the available space; no verse collection is bundled.
 - **Expanded Weather screen:** current temperature, feels-like temperature, humidity and wind, up to eight upcoming hourly forecasts and a five-day outlook.
 - **Dynamic ambient app lighting:** the focused app's colors illuminate the dock with smooth focus transitions.
 - **Faster GO DAIKIN controls:** immediate optimistic display updates, debounced target dispatch and protection against background polling overwriting in-flight settings.
 - **Controls for every online AC:** power, temperature, fan and operating-mode controls are available across registered online GO DAIKIN units, with consistent Online/Offline presence alongside Tapo and Kasa devices.
-- **Remote navigation refinements:** wrapping screen tabs and a compact, top-aligned Prayer Time layout that keeps the full hadith visible without scrolling.
+- **Remote navigation refinements:** wrapping screen tabs and a compact, top-aligned Prayer Time layout that keeps the full verse and translation visible without scrolling.
 
 ## The four screens
 
@@ -30,13 +30,13 @@ The current day's moon data is cached privately. If it is unavailable, the moon 
 
 ### Prayer Time
 
-![Prayer Time screen with official JAKIM SGR01 times and the complete Malay hadith fitted without scrolling](docs/screenshots/octahedron-prayer-time.png)
+![Prayer Time screen with official JAKIM SGR01 times and an Arabic Quran verse with Malay translation](docs/screenshots/octahedron-prayer-time.png)
 
 A full-width, read-only **official JAKIM SGR01 prayer timeline** accompanies **HADITH OF THE DAY**. Prayer schedules are cached and refreshed; unavailable official data is not replaced with calculated times.
 
-The hadith card displays the original Malay title and complete `Maksud Hadith` from [JAKIM MyHadith](https://myhadith.islam.gov.my/), using Alexandria typography. Arabic is excluded from the display. Native text auto-sizing preserves all wording without ellipsis or scrolling; very long entries use smaller text. The dock and app grid are hidden on this screen to give the content more space.
+The **AL QURAN VERSE OF THE DAY** card displays original Arabic and Malay translation from [Mengaji.my](https://www.mengaji.my/api-docs/), whose translation is based on Tafsir Pimpinan Ar-Rahman by Sheikh Abdullah Basmeih. Arabic uses the official KFGQPC Hafs Uthmanic font, followed by a blank line and the Malay translation in Alexandria. The surah/ayah reference sits directly below the translation; the provider footer is hidden. Native auto-sizing preserves all wording without ellipsis or scrolling; very long verses use smaller text. The dock and app grid remain hidden.
 
-A fixed schedule selects among 365 distinct official page URLs using Malaysia-calendar days, repeating after 365 days. The launcher fetches the day's page when Prayer Time opens and caches it privately. A new day requires Internet access; an older entry is never silently substituted. Loading or unavailable states appear when the source cannot be read. See [daily-hadith details and checks](docs/daily-hadith.md).
+The verse changes at Subuh, Zohor, Asar, Maghrib and Isyak using official JAKIM SGR01 times. It remains stable through Syuruk, midnight, reopening and app restarts within the same interval. An API request supplies each new verse; only the latest result is cached privately. A new interval requires Internet and a previous interval's verse is never silently substituted. This third-party Quran API is separate from JAKIM's prayer schedule. See [Quran verse details and checks](docs/prayer-quran-verse.md).
 
 ### Weather
 
@@ -99,17 +99,17 @@ Android checks require an authorized test TV or compatible Android device. The d
 
 ```bash
 # Run from launcher/. Build each test APK separately for its selected runner.
-bash ./gradlew :app:assembleDebugAndroidTest -PtestRunner=tv.widgetv.home.DailyHadithChecks
+bash ./gradlew :app:assembleDebugAndroidTest -PtestRunner=tv.widgetv.home.PrayerVerseChecks
 bash ./gradlew :app:assembleDebugAndroidTest -PtestRunner=tv.widgetv.home.LivingSkyChecks
 ```
 
 After installing the debug app and the matching test APK on an authorized device, invoke the selected runner, for example:
 
 ```text
-adb shell am instrument -w tv.widgetv.home.test/tv.widgetv.home.DailyHadithChecks
+adb shell am instrument -w tv.widgetv.home.test/tv.widgetv.home.PrayerVerseChecks
 ```
 
-Daily-hadith and living-sky checks include real official-source requests. They were not executed during cloud onboarding. Earlier hardware results are recorded in the linked reports; power and unexercised AC settings must not be treated as physically verified from build or mock-test results.
+Quran-verse checks include a real provider API request; living-sky checks include official USNO calendar requests. They are separate from cloud onboarding checks. Earlier hardware results are recorded in the linked reports; power and unexercised AC settings must not be treated as physically verified from build or mock-test results.
 
 ## Configure and install on a TV
 
@@ -145,12 +145,12 @@ There is no external backend requirement or analytics integration. Network use d
 |---|---|
 | Weather | Open-Meteo, with configured city coordinates |
 | Official prayer schedule | JAKIM schedule provider |
-| Daily hadith | `myhadith.islam.gov.my` |
+| Arabic Quran verse / Malay translation | `api.mengaji.my` |
 | Daily moon phase | `aa.usno.navy.mil` |
 | GO DAIKIN | Account authentication and device cloud API |
 | Tapo/Kasa | Discovery and control on the local network |
 
-Hadith, moon-calendar and prayer data are cached privately with feature-specific freshness rules. Normal TLS certificate and hostname verification remain enabled. The MyHadith connection includes a domain-specific official GlobalSign root for older Android trust stores; see the [certificate details](docs/daily-hadith.md).
+Quran-verse, moon-calendar and prayer data are cached privately with feature-specific freshness rules. Normal TLS certificate and hostname verification remain enabled. The earlier MyHadith implementation remains historical source; see [its documentation](docs/daily-hadith.md).
 
 Enter smart-home credentials privately on the TV. Do not commit credentials, TV backups or private signing keys. The original location permission supports showing the Wi-Fi network name; configured city coordinates supply weather and calendar requests.
 

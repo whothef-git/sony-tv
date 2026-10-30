@@ -264,7 +264,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="76dp" />
 
-                        <!-- Original MyHadith text fills the space below the prayer timeline. -->
+                        <!-- API-supplied Arabic verse and Malay translation fill the prayer content area. -->
                         <LinearLayout
                             android:id="@+id/thought"
                             android:layout_width="match_parent"
@@ -303,6 +303,7 @@
 
                             <TextView
                                 android:id="@+id/thought_source"
+                                android:visibility="gone"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"

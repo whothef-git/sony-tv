@@ -85,7 +85,7 @@ public class MainActivity extends Activity {
     private GlassHighlight glass;
     private TextView clock, awayClock, date, ssid;
     private ImageView[] pills; // the three round buttons: Inputs, Wi-Fi, Settings
-    private Typeface ui;
+    private Typeface ui, quranFont;
     private LinearLayout menu;
     private ScreenTabs screenTabs;
     private ForecastView forecastView;
@@ -117,12 +117,11 @@ public class MainActivity extends Activity {
     private int fakeMinutes = -1; // debug fake_time as minutes of the day, or -1
     /** Debug builds only: a fixed local date for the thought of the day (adb fake_date), or null. */
     private LocalDate fakeDate;
-    private DailyHadith hadith;
-    private String shownHadithUrl;
+    private PrayerVerse verses;
+    private long shownVerseSlot = -1;
     private View hereWeather, thought;
     private ImageView awayFlag;
     private TextView hereTemp, awayTemp, awayRange, thoughtTag, thoughtText, thoughtSource;
-    private LocalDate shownThoughtDate;
     private Config cfg;
     private View header, awayRow;
 
@@ -149,7 +148,7 @@ public class MainActivity extends Activity {
         thoughtTag = findViewById(R.id.thought_tag);
         thoughtText = findViewById(R.id.thought_text);
         thoughtSource = findViewById(R.id.thought_source);
-        hadith = new DailyHadith(this);
+        verses = new PrayerVerse(this);
         cfg = Config.get(this);
         header = findViewById(R.id.header);
         awayRow = findViewById(R.id.away_row);
@@ -288,7 +287,7 @@ public class MainActivity extends Activity {
         io.shutdownNow();
         weather.shutdown();
         sky.shutdown();
-        hadith.shutdown();
+        verses.shutdown();
         smartHome.shutdown();
     }
 
@@ -308,7 +307,7 @@ public class MainActivity extends Activity {
         screenTabs.setState(index, zone == Zone.TABS);
         atmosphere.setScreenActive(index == 2, animate);
         atmosphere.setRunning(resumed && index == 2);
-        if (index == 1) renderHadith();
+        if (index == 1) renderVerse();
         View target = index == 1 ? prayerScreen : index == 2 ? forecastView : index == 3 ? smartHome : null;
         if (!animate) {
             prayerScreen.animate().cancel(); forecastView.animate().cancel();
@@ -839,6 +838,7 @@ public class MainActivity extends Activity {
         thoughtTag.setFontVariationSettings("'wght' 400");
         thoughtText.setFontVariationSettings("'wght' 400");
         thoughtSource.setFontVariationSettings("'wght' 400");
+        quranFont = getResources().getFont(R.font.uthmanic_hafs);
         thoughtText.setAutoSizeTextTypeUniformWithConfiguration(1, 16 + l, 1, TypedValue.COMPLEX_UNIT_SP);
         thoughtSource.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9 + l);
         if (day != null) renderDateAndWeather();
@@ -874,7 +874,7 @@ public class MainActivity extends Activity {
         timeline.setDay(day.isJakim ? day : null);
         sky.update(day);
         renderDateAndWeather();
-        renderHadith();
+        renderVerse();
         if (BuildConfig.DEBUG && cfg.prayerEnabled) timeline.post(this::logExpectedDot);
     }
 
@@ -943,32 +943,33 @@ public class MainActivity extends Activity {
         return sb;
     }
 
-    /** Original MyHadith entry, selected by Malaysia's date on a stable 365-day cycle. */
-    private void renderHadith() {
+    /** Original API text, changing only when the current official JAKIM prayer interval changes. */
+    private void renderVerse() {
         if (!cfg.thoughtsEnabled) {
             thought.setVisibility(View.GONE);
             return;
         }
-        LocalDate today = fakeDate != null ? fakeDate
-                : java.time.Instant.ofEpochMilli(nowMillis()).atZone(JakimProvider.MALAYSIA).toLocalDate();
-        if (!today.equals(shownThoughtDate)) {
-            shownThoughtDate = today; shownHadithUrl = null;
-        }
         thought.setVisibility(View.VISIBLE);
-        thoughtTag.setText("HADITH OF THE DAY");
-        DailyHadith.Entry entry = hadith.get(today);
+        thoughtTag.setText("AL QURAN VERSE OF THE DAY");
+        thoughtSource.setVisibility(View.GONE);
+        if (day == null || !day.isJakim) {
+            thoughtText.setText("Jadual waktu solat JAKIM belum tersedia. Ayat akan dimuatkan apabila jadual tersedia.");
+            shownVerseSlot = -1;
+            return;
+        }
+        long slot = PrayerVerse.slot(day.now, day.times, day.yesterdayIsha);
+        PrayerVerse.Entry entry = verses.get(slot);
         if (entry != null) {
-            if (!entry.url.equals(shownHadithUrl)) {
-                thoughtText.setText(entry.display());
-                shownHadithUrl = entry.url;
+            if (slot != shownVerseSlot) {
+                thoughtText.setText(entry.display(quranFont));
+                shownVerseSlot = slot;
             }
         } else {
-            thoughtText.setText(hadith.failed() ? "Hadith hari ini belum dapat dimuatkan. Sila semak sambungan Internet."
-                    : "Memuatkan hadith asal daripada MyHadith JAKIM…");
-            if (tabIdx == 1) hadith.maybeFetch(today, () -> { if (!isDestroyed()) renderHadith(); });
+            shownVerseSlot = -1;
+            thoughtText.setText(verses.failed() ? "Ayat Al-Quran belum dapat dimuatkan. Sila semak sambungan Internet."
+                    : "Memuatkan ayat Al-Quran dan terjemahan Bahasa Melayu…");
+            if (tabIdx == 1) verses.maybeFetch(slot, () -> { if (!isDestroyed()) renderVerse(); });
         }
-        thoughtSource.setText("MyHadith · JAKIM");
-        thoughtSource.setVisibility(View.VISIBLE);
     }
 
     private static void append(SpannableStringBuilder sb, CharSequence text, int color) {
@@ -1045,7 +1046,7 @@ public class MainActivity extends Activity {
                 } catch (RuntimeException bad) {
                     fakeDate = null;
                 }
-                shownThoughtDate = null;
+                shownVerseSlot = -1;
             }
             String fake = intent.getStringExtra("fake_time");
             if (fake != null) {
