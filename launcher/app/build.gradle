@@ -10,8 +10,8 @@ android {
         applicationId 'tv.widgetv.home'
         minSdk 28
         targetSdk 34
-        versionCode 12
-        versionName '2.1'
+        versionCode 13
+        versionName '3.0'
         testInstrumentationRunner project.findProperty('testRunner') ?: 'tv.widgetv.home.SmartHomeIntegrationChecks'
     }
 
