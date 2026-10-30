@@ -238,6 +238,7 @@ public class MainActivity extends Activity {
         glass.setRunning(true);
         smartHome.setRunning(true);
         atmosphere.setRunning(tabIdx == 2);
+        cacheWeatherLayers(tabIdx == 2);
         IntentFilter timeFilter = new IntentFilter(Intent.ACTION_TIME_TICK);
         timeFilter.addAction(Intent.ACTION_TIME_CHANGED);
         timeFilter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
@@ -263,6 +264,7 @@ public class MainActivity extends Activity {
         glass.setRunning(false);
         smartHome.setRunning(false);
         atmosphere.setRunning(false);
+        cacheWeatherLayers(false);
         unregisterReceiver(timeReceiver);
         if (zone == Zone.MENU) closeMenu();
         String pkg = focusedPkg();
@@ -303,6 +305,12 @@ public class MainActivity extends Activity {
         smartHome.shutdown();
     }
 
+    private void cacheWeatherLayers(boolean active){
+        int layer=active?View.LAYER_TYPE_HARDWARE:View.LAYER_TYPE_NONE;
+        if(sky.getLayerType()!=layer)sky.setLayerType(layer,null);
+        if(forecastView.getLayerType()!=layer)forecastView.setLayerType(layer,null);
+    }
+
     private void showScreen(int index, boolean animate) {
         int previous = tabIdx;
         boolean changed = previous != index;
@@ -319,6 +327,7 @@ public class MainActivity extends Activity {
         screenTabs.setState(index, zone == Zone.TABS);
         atmosphere.setScreenActive(index == 2, animate);
         atmosphere.setRunning(resumed && index == 2);
+        cacheWeatherLayers(resumed && index == 2);
         if (index == 1) renderVerse();
         View target = index == 1 ? prayerScreen : index == 2 ? forecastView : index == 3 ? smartHome : null;
         if (!animate) {
