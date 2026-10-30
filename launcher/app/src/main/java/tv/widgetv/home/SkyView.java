@@ -51,7 +51,7 @@ public final class SkyView extends View {
     private int patternIndex = -1;
     private Bitmap tile;
     private boolean rotate;
-    private final LivingSky living=new LivingSky();
+    private final LivingSky living;
     private final MoonCalendar moonCalendar;
     private PrayerDay currentDay;
     private long updatedAt;
@@ -65,6 +65,7 @@ public final class SkyView extends View {
 
     public SkyView(Context c, AttributeSet a) {
         super(c, a);
+        living=new LivingSky(c);
         moonCalendar=new MoonCalendar(c);
         rotate = "rotate".equals(c.getString(R.string.pattern_mode));
         Random r = new Random(1448);
