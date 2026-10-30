@@ -1,5 +1,8 @@
 # Daily hadith on Prayer Time
 
+Historical implementation: the current Prayer Time card uses an API-supplied Arabic
+Quran verse with Malay translation, rotating at prayer times. See [Quran verse details](prayer-quran-verse.md).
+
 The card is headed **HADITH OF THE DAY**. Its heading, Malay meaning and source use Alexandria Regular. The heading is 20sp before the existing text-size adjustment. Content is top-aligned with a 6dp top margin and no top padding. Android's native uniform text auto-sizing fits the entire content into the fixed available area, choosing the largest size from 1sp up to 16sp plus that adjustment. Short entries stay large; long entries become smaller. Only the original Malay title and complete `Maksud Hadith` are displayed, without paraphrasing, inserted quote marks or ellipsis. Arabic content is excluded from the display.
 
 The app ships a fixed schedule of 365 distinct official page URLs selected from [MyHadith's sitemap](https://myhadith.islam.gov.my/sitemap.xml). It does not bundle or generate hadith translations. The day index is the elapsed number of Malaysia-calendar days since 1 January 2026 modulo 365; it remains stable through restarts and includes leap days without repeating adjacent entries. The schedule repeats after 365 days.
