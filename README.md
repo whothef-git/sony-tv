@@ -4,9 +4,7 @@ A calm, widget-first Android TV launcher with a living sky, local and world cloc
 
 Use the TV remote to move between **Home**, **Prayer Time**, **Weather** and **Smart Home**. Screen-tab navigation wraps from the last tab to the first and back.
 
-![Launcher design heritage: daytime home screen](docs/screenshots/day-1230.png)
-
-*The repository screenshots show earlier WidgeTV builds; they are not a complete preview of v3.*
+*Fresh screenshots of all four screens appear below, captured on Sony BRAVIA running Octahedron v3.0 (version code 13) on 30 October 2026. Device states, forecasts and daily content reflect the capture time.*
 
 ## What's new in v3
 
@@ -22,6 +20,8 @@ Use the TV remote to move between **Home**, **Prayer Time**, **Weather** and **S
 
 ### Home
 
+![Home screen with local and Saudi clocks, Malay Hijri date, living sky and ambient app dock](docs/screenshots/octahedron-home.png)
+
 Local and secondary-city clocks, Gregorian and Malay Hijri dates, weather summaries, system shortcuts and an app dock sit over a geometric sky background. Choose four dock apps and open the remaining apps from the grid. Inputs, Wi-Fi and Settings remain accessible from the remote.
 
 The living sky preserves the existing wallpaper and layout. The sun follows configured local sunrise and sunset timing. The moon moves along a decorative night arc; its position is an ambient illustration, not an astronomical altitude or moonrise prediction. Its illuminated fraction and phase orientation use the current local date's official calendar response.
@@ -30,6 +30,8 @@ The current day's moon data is cached privately. If it is unavailable, the moon 
 
 ### Prayer Time
 
+![Prayer Time screen with official JAKIM SGR01 times and the complete Malay hadith fitted without scrolling](docs/screenshots/octahedron-prayer-time.png)
+
 A full-width, read-only **official JAKIM SGR01 prayer timeline** accompanies **HADITH OF THE DAY**. Prayer schedules are cached and refreshed; unavailable official data is not replaced with calculated times.
 
 The hadith card displays the original Malay title and complete `Maksud Hadith` from [JAKIM MyHadith](https://myhadith.islam.gov.my/), using Alexandria typography. Arabic is excluded from the display. Native text auto-sizing preserves all wording without ellipsis or scrolling; very long entries use smaller text. The dock and app grid are hidden on this screen to give the content more space.
@@ -37,6 +39,8 @@ The hadith card displays the original Malay title and complete `Maksud Hadith` f
 A fixed schedule selects among 365 distinct official page URLs using Malaysia-calendar days, repeating after 365 days. The launcher fetches the day's page when Prayer Time opens and caches it privately. A new day requires Internet access; an older entry is never silently substituted. Loading or unavailable states appear when the source cannot be read. See [daily-hadith details and checks](docs/daily-hadith.md).
 
 ### Weather
+
+![Weather screen with current conditions, eight hourly forecasts and a five-day outlook](docs/screenshots/octahedron-weather.png)
 
 The expanded screen uses [Open-Meteo](https://open-meteo.com/) for:
 
@@ -48,6 +52,8 @@ The expanded screen uses [Open-Meteo](https://open-meteo.com/) for:
 Condition-driven weather atmosphere remains separate from the living-sky overlay. Rain effects depend on current conditions, not forecast precipitation probability. Weather summaries for the local and secondary cities remain in the header. No Open-Meteo API key is required.
 
 ### Smart Home
+
+![Smart Home screen with five Daikin air conditioners, two Tapo plugs and one Kasa power-strip card](docs/screenshots/octahedron-smart-home.png)
 
 The integrated grid combines **GO DAIKIN air conditioners**, **Tapo P110 plugs** and a **Kasa KP303 three-outlet power strip**. Device controls open in floating dialogs, with remote focus returning to the grid when dismissed.
 
