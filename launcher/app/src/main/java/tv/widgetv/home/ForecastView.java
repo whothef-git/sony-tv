@@ -160,18 +160,20 @@ public final class ForecastView extends View {
         float cY1 = 124, cY2 = 160;
         float p1L = 20, p1R = p1L + 68;
         chip(canvas, p1L, cY1, p1R, cY2);
-        bold(canvas, "FEELS", (p1L + p1R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
-        bold(canvas, current.apparentTemp + "°", (p1L + p1R) / 2, cY2 - 7, 12, WHITE, Paint.Align.CENTER);
+        bold(canvas, "SUNRISE", (p1L + p1R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
+        bold(canvas, eventTime(forecast.sunrise), (p1L + p1R) / 2, cY2 - 7, 10.5f, WHITE, Paint.Align.CENTER);
 
         float p2L = p1R + 7, p2R = p2L + 68;
         chip(canvas, p2L, cY1, p2R, cY2);
-        bold(canvas, "HUMID", (p2L + p2R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
-        bold(canvas, current.humidity + "%", (p2L + p2R) / 2, cY2 - 7, 12, WHITE, Paint.Align.CENTER);
+        bold(canvas, "SUNSET", (p2L + p2R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
+        bold(canvas, eventTime(forecast.sunset), (p2L + p2R) / 2, cY2 - 7, 10.5f, WHITE, Paint.Align.CENTER);
 
         float p3L = p2R + 7, p3R = heroR - 20;
         chip(canvas, p3L, cY1, p3R, cY2);
-        bold(canvas, "WIND", (p3L + p3R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
-        bold(canvas, current.windSpeed + " km/h", (p3L + p3R) / 2, cY2 - 7, 10.5f, WHITE, Paint.Align.CENTER);
+        bold(canvas, "NEXT RAIN", (p3L + p3R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
+        String nextRain = WeatherAtmosphereView.rainCode(current.code) ? "Now"
+                : !forecast.rainTimingAvailable ? "—" : forecast.nextRain > 0 ? "~" + eventTime(forecast.nextRain) : "None 24h";
+        bold(canvas, nextRain, (p3L + p3R) / 2, cY2 - 7, 10, WHITE, Paint.Align.CENTER);
 
         // ── Hourly strip ──────────────────────────────────────────────────
         float hL = heroR + 12f;
@@ -195,16 +197,12 @@ public final class ForecastView extends View {
             if (i == 0) bold(canvas, timeStr, cx, 48, 11.5f, WHITE, Paint.Align.CENTER);
             else         norm(canvas, timeStr, cx, 48, 11.5f, WHITE, Paint.Align.CENTER);
 
-            icon(canvas, hr.code, hr.day, cx - 11, 57, 22);
+            icon(canvas, hr.code, hr.day, cx - 15, 64, 30);
 
-            bold(canvas, hr.temp + "°", cx, 101, 16, WHITE, Paint.Align.CENTER);
-            norm(canvas, hr.apparentTemp == Integer.MIN_VALUE ? "Feels —" : "Feels " + hr.apparentTemp + "°",
-                    cx, 120, 10, MUTED_LT, Paint.Align.CENTER);
-            norm(canvas, "Rain " + hr.rain + "%", cx, 138, 10, RAIN_COLOR, Paint.Align.CENTER);
-            norm(canvas, hr.humidity < 0 ? "Humidity —" : "Humidity " + hr.humidity + "%",
-                    cx, 156, 9.5f, MUTED, Paint.Align.CENTER);
-            norm(canvas, hr.windSpeed < 0 ? "Wind —" : "Wind " + hr.windSpeed + " km/h",
-                    cx, 174, 9.5f, MUTED, Paint.Align.CENTER);
+            bold(canvas, hr.temp + "°", cx, 125, 18, WHITE, Paint.Align.CENTER);
+            norm(canvas, "Rain " + hr.rain + "%", cx, 157, 11, RAIN_COLOR, Paint.Align.CENTER);
+            norm(canvas, Double.isFinite(hr.precipitation) ? String.format(Locale.UK, "%.1f mm", hr.precipitation) : "— mm",
+                    cx, 177, 10, MUTED_LT, Paint.Align.CENTER);
         }
 
         // ── 5-day strip ───────────────────────────────────────────────────
@@ -283,6 +281,12 @@ public final class ForecastView extends View {
                 w / 2, footerY, 10, MUTED, Paint.Align.CENTER);
 
         canvas.restore();
+    }
+
+    private String eventTime(long at) {
+        if (at <= 0) return "—";
+        return Instant.ofEpochMilli(at).atZone(JakimProvider.MALAYSIA).format(DateTimeFormatter.ofPattern(
+                android.text.format.DateFormat.is24HourFormat(getContext()) ? "HH:mm" : "h:mma", Locale.UK));
     }
 
     static String condition(int code) {
