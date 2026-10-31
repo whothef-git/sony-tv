@@ -12,12 +12,15 @@ import android.view.animation.DecelerateInterpolator;
 public final class ScreenTabs extends View {
     static final String[] LABELS = {"Home", "Prayer Time", "Weather", "Smart Home"};
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG), line = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final int FOCUS_GOLD = Lapis.GOLD_400;
     private final float d;
     private int selected;
     private boolean focused;
     private float indicatorLeft, indicatorRight, fromLeft, fromRight, toLeft, toRight;
     private boolean placed;
     private final ValueAnimator indicator = ValueAnimator.ofFloat(0f, 1f);
+    private final ValueAnimator focusFade = new ValueAnimator();
+    private float focusAmount;
     public ScreenTabs(Context c, AttributeSet a) {
         super(c, a);
         d = getResources().getDisplayMetrics().density;
@@ -33,10 +36,18 @@ public final class ScreenTabs extends View {
             indicatorRight = fromRight + (toRight-fromRight)*t;
             invalidate();
         });
+        focusFade.setDuration(220);
+        focusFade.setInterpolator(new DecelerateInterpolator());
+        focusFade.addUpdateListener(animation -> { focusAmount=(float)animation.getAnimatedValue();invalidate(); });
         setState(0, false);
     }
     void setState(int selected, boolean focused) {
         boolean changed = this.selected != selected;
+        if(this.focused!=focused){
+            focusFade.cancel();
+            if(!isAttachedToWindow())focusAmount=focused?1f:0f;
+            else {focusFade.setFloatValues(focusAmount,focused?1f:0f);focusFade.start();}
+        }
         this.selected = selected; this.focused = focused;
         if (changed || !placed) {
             float left = 0;
@@ -56,12 +67,12 @@ public final class ScreenTabs extends View {
         float x = 0;
         for (int i = 0; i < LABELS.length; i++) {
             float width = text.measureText(LABELS[i]);
-            text.setColor(i == selected ? Lapis.PLASTER_100 : Lapis.MIST_400);
+            text.setColor(i == selected ? SkyView.lerpColor(Lapis.PLASTER_100,FOCUS_GOLD,focusAmount) : Lapis.MIST_400);
             c.drawText(LABELS[i], x, 23*d, text);
             x += width + 30*d;
         }
-        line.setColor(focused ? Lapis.PLASTER_100 : 0xFF9EADC3);
-        c.drawRoundRect(indicatorLeft,getHeight()-2*d,indicatorRight,getHeight(),d,d,line);
+        line.setColor(SkyView.lerpColor(0xFF9EADC3,FOCUS_GOLD,focusAmount));
+        c.drawRoundRect(indicatorLeft,getHeight()-4.5f*d,indicatorRight,getHeight()-2.5f*d,d,d,line);
         text.setColor(Lapis.MIST_400); text.setTextSize(10*d);
         if (selected == 1) {
             String label = "SHAH ALAM · SGR01";
@@ -69,5 +80,5 @@ public final class ScreenTabs extends View {
         }
         text.setTextSize(14 * getResources().getDisplayMetrics().scaledDensity);
     }
-    @Override protected void onDetachedFromWindow() { indicator.cancel(); super.onDetachedFromWindow(); }
+    @Override protected void onDetachedFromWindow() { indicator.cancel(); focusFade.cancel(); super.onDetachedFromWindow(); }
 }
