@@ -148,7 +148,38 @@ public final class WeatherAtmosphereView extends View {
             dropRect.set(x-width/2,y-length,x+width/2,y);
             c.drawBitmap(streak,null,dropRect,rain);
         }
+        drawSplashes(c,w,h,seconds,code);
         rain.setAlpha(255);
+    }
+    /** Short ballistic droplets at the screen edge, timed to each falling drop's impact. */
+    void drawSplashes(Canvas c,float w,float h,double seconds,int code){
+        rain.setShader(null);rain.setColor(0xFFD5E8F5);rain.setStyle(Paint.Style.STROKE);
+        for(int i=0;i<rainDrops(code);i++){
+            float depth=dropDepth[i],length=(6+depth*19)*d;
+            double speed=(95+depth*300)*d,span=h+2*length,period=span/speed;
+            double impact=(h+length-dropPhase[i]*span)/speed;
+            double age=((seconds-impact)%period+period)%period;
+            float life=.30f+depth*.16f;
+            if(age>life)continue;
+            float t=(float)(age/life),fade=(1-t)*(1-t);
+            float x=(float)((dropX[i]*(w+24*d)+(seconds-age)*(2+depth*3)*d)%(w+24*d))-12*d;
+            float ground=h-2*d;
+            rain.setStrokeWidth((.55f+depth*.45f)*d);
+            rain.setAlpha((int)((95+depth*105)*fade));
+            float radius=(1+t*(5+depth*8))*d;
+            dropRect.set(x-radius,ground-(.5f+t)*d,x+radius,ground+(.5f+t)*d);
+            c.drawArc(dropRect,180,180,false,rain);
+            for(int jet=0;jet<4;jet++){
+                float direction=jet<2?-1:1;
+                float reach=(5+depth*10+(jet%2)*5)*d;
+                float height=(4+depth*9+(jet%2)*3)*d;
+                float px=x+direction*reach*t,py=ground-4*height*t*(1-t);
+                float tail=.035f;
+                float before=Math.max(0,t-tail);
+                c.drawLine(x+direction*reach*before,ground-4*height*before*(1-before),px,py,rain);
+            }
+        }
+        rain.setStyle(Paint.Style.FILL);rain.setAlpha(255);
     }
     private float seed(int i,int salt) {
         long n=(i+1)*0x9E3779B9L ^ salt*0x85EBCA6BL;
