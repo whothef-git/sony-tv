@@ -45,6 +45,17 @@ public final class WeatherRainChecks extends Instrumentation {
             first.getPixels(a,0,960,0,0,960,540);second.getPixels(b,0,960,0,0,960,540);
             int changed=0;for(int i=960*380;i<a.length;i++)if(a[i]!=b[i])changed++;
             check(changed>100,"rain moves through the lower scene rather than remaining static");
+            ui(()->{first.eraseColor(0);view[0].drawSplashes(new Canvas(first),960,540,12.3,65);});
+            first.getPixels(a,0,960,0,0,960,540);
+            int splashPixels=0,upperPixels=0;
+            for(int i=0;i<a.length;i++)if(a[i]!=0){if(i/960>490)splashPixels++;else upperPixels++;}
+            check(splashPixels>20&&upperPixels==0,"heavy rain splashes stay along the bottom edge");
+            ui(()->{second.eraseColor(0);view[0].drawSplashes(new Canvas(second),960,540,12.44,65);});
+            second.getPixels(b,0,960,0,0,960,540);
+            check(!Arrays.equals(a,b),"splash droplets move and fade after impacts");
+            ui(()->{first.eraseColor(0);view[0].drawSplashes(new Canvas(first),960,540,12.3,0);});
+            first.getPixels(a,0,960,0,0,960,540);
+            check(Arrays.stream(a).allMatch(pixel->pixel==0),"dry weather has no bottom splashes");
             ui(()->{
                 view[0].setWeather(new Weather.City(25,0,false,31,24,true));
                 first.eraseColor(0);view[0].draw(new Canvas(first));
