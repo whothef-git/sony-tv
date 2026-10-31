@@ -30,7 +30,7 @@ import java.util.concurrent.Executors;
  */
 final class Weather {
     private static final String TAG = Config.TAG;
-    private static final long STALE_MS = 30 * 60_000L, HIDE_MS = 3 * 60 * 60_000L, RETRY_GAP_MS = 10 * 60_000L;
+    private static final long STALE_MS = 10 * 60_000L, HIDE_MS = 3 * 60 * 60_000L, RETRY_GAP_MS = 10 * 60_000L;
 
     /** One city's reading, in the configured units. */
     static final class City {
@@ -62,6 +62,7 @@ final class Weather {
     static final class Hour {
         final long at;
         final int temp, code, rain, humidity, apparentTemp, windSpeed;
+        double precipitation = Double.NaN;
         final boolean day;
         Hour(long at, int temp, int code, int rain, boolean day, int humidity, int apparentTemp, int windSpeed) {
             this.at = at; this.temp = temp; this.code = code; this.rain = rain; this.day = day;
@@ -79,7 +80,8 @@ final class Weather {
     static final class Forecast {
         final List<Hour> hours = new ArrayList<>();
         final List<Day> days = new ArrayList<>();
-        long updated;
+        long updated, sunrise, sunset, nextRain;
+        boolean rainTimingAvailable;
     }
 
     private final SharedPreferences prefs;
@@ -102,8 +104,8 @@ final class Weather {
         String lngs = coord(cfg.lng) + (cities == 2 ? "," + coord(cfg.secondLng) : "");
         url = "https://api.open-meteo.com/v1/forecast?latitude=" + lats + "&longitude=" + lngs
                 + "&current=temperature_2m,weather_code,is_day,apparent_temperature,relative_humidity_2m,wind_speed_10m"
-                + "&hourly=temperature_2m,weather_code,precipitation_probability,is_day,relative_humidity_2m,apparent_temperature,wind_speed_10m"
-                + "&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto&forecast_days=6&timeformat=unixtime&wind_speed_unit=kmh"
+                + "&hourly=temperature_2m,weather_code,precipitation_probability,precipitation,is_day,relative_humidity_2m,apparent_temperature,wind_speed_10m"
+                + "&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset&timezone=auto&forecast_days=6&timeformat=unixtime&wind_speed_unit=kmh"
                 + "&temperature_unit=" + cfg.weatherUnits;
     }
 
@@ -142,6 +144,19 @@ final class Weather {
         out.updated = updated;
         JSONObject hourly = json.getJSONObject("hourly"), daily = json.getJSONObject("daily");
         JSONArray ht = hourly.getJSONArray("time"), dt = daily.getJSONArray("time");
+        JSONArray amounts = hourly.optJSONArray("precipitation");
+        boolean complete = true;
+        int timingHours = 0;
+        for (int i = 0; i < ht.length(); i++) {
+            long at = ht.getLong(i) * 1000L;
+            if (at <= now || at > now + 24 * 60 * 60_000L) continue;
+            timingHours++;
+            double amount = amounts == null ? Double.NaN : amounts.optDouble(i, Double.NaN);
+            if (!Double.isFinite(amount) || amount < 0) { complete = false; continue; }
+            int code = hourly.getJSONArray("weather_code").getInt(i);
+            if (out.nextRain == 0 && amount > 0 && WeatherAtmosphereView.rainCode(code)) out.nextRain = at;
+        }
+        out.rainTimingAvailable = complete && timingHours == 24;
         for (int i = 0; i < ht.length() && out.hours.size() < 8; i++) {
             long at = ht.getLong(i) * 1000L;
             if (at < now) continue;
@@ -151,11 +166,18 @@ final class Weather {
                     hourly.getJSONArray("weather_code").getInt(i), rain, hourly.getJSONArray("is_day").getInt(i) == 1,
                     optionalPercent(hourly, "relative_humidity_2m", i),
                     optionalRounded(hourly, "apparent_temperature", i), optionalRounded(hourly, "wind_speed_10m", i)));
+            double amount = amounts == null ? Double.NaN : amounts.optDouble(i, Double.NaN);
+            out.hours.get(out.hours.size()-1).precipitation = Double.isFinite(amount) && amount >= 0 ? amount : Double.NaN;
         }
         java.time.LocalDate today = java.time.Instant.ofEpochMilli(now).atZone(JakimProvider.MALAYSIA).toLocalDate();
         for (int i = 0; i < dt.length() && out.days.size() < 5; i++) {
             long at = dt.getLong(i) * 1000L;
             if (java.time.Instant.ofEpochMilli(at).atZone(JakimProvider.MALAYSIA).toLocalDate().isBefore(today)) continue;
+            if (java.time.Instant.ofEpochMilli(at).atZone(JakimProvider.MALAYSIA).toLocalDate().equals(today)) {
+                JSONArray rise = daily.optJSONArray("sunrise"), set = daily.optJSONArray("sunset");
+                out.sunrise = rise == null ? 0 : Math.max(0, rise.optLong(i, 0)) * 1000L;
+                out.sunset = set == null ? 0 : Math.max(0, set.optLong(i, 0)) * 1000L;
+            }
             int min = (int) Math.round(daily.getJSONArray("temperature_2m_min").getDouble(i));
             int max = (int) Math.round(daily.getJSONArray("temperature_2m_max").getDouble(i));
             if (max < min) throw new IllegalArgumentException("Invalid temperature range");
@@ -179,11 +201,11 @@ final class Weather {
         return Double.isFinite(value) ? (int) Math.round(value) : Integer.MIN_VALUE;
     }
 
-    /** Fetch if the cache is older than 30 minutes (or force); onDone runs on the main thread after a success. */
+    /** Fetch if the cache is at least 10 minutes old (or force); onDone runs on the main thread after a success. */
     void maybeFetch(boolean force, Runnable onDone) {
         if (!enabled) return;
         long now = System.currentTimeMillis();
-        boolean stale = !url.equals(prefs.getString("url", "")) || now - prefs.getLong("at", 0) > STALE_MS;
+        boolean stale = !url.equals(prefs.getString("url", "")) || now - prefs.getLong("at", 0) >= STALE_MS;
         if (inFlight || (!force && (!stale || now - lastAttempt < RETRY_GAP_MS))) return;
         inFlight = true;
         lastAttempt = now;

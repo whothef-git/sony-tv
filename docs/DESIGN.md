@@ -109,9 +109,17 @@ Normal, Large and Larger scale everything except the main clock and the dock:
 
 One Open-Meteo request for both cities: current temperature, WMO weather code, day/night, and today's
 high/low in each city's own local day. Fetched from `onResume` and the minute tick (whose receiver is
-only registered while the launcher is resumed), when the cache is older than 30 minutes, at most one
+only registered while the launcher is resumed), when the cache is at least 10 minutes old, at most one
 attempt per 10 minutes. Data older than 3 hours is hidden rather than shown stale. Nine thin-line icons
 cover seven weather types.
+
+The Weather hero's three chips show today's Sunrise, Sunset and Next Rain. Solar times use the same
+Open-Meteo daily response. Next Rain scans the next 24 hours for nonzero forecast precipitation with
+a rainy condition code, independently of rain probability. It shows an approximate hourly time, Now
+when the current condition is rainy, None 24h for a complete dry window, or a dash if data is missing.
+The hourly strip shows time, condition icon, temperature, rain chance and forecast precipitation in
+millimetres (one decimal place; missing values show a dash), with Feels, Humidity and Wind
+removed. These are forecast estimates, not rain-onset observations.
 
 ## Thought of the day (`Thoughts`)
 
