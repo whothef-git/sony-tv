@@ -11,4 +11,6 @@
     <string name="tv_inputs">TV inputs</string>
     <string name="prayer_settings">Prayer settings</string>
     <string name="display_settings">Display settings</string>
+    <string name="dock_reorder_hint">← / → Move    ·    OK Save    ·    Back Cancel</string>
+    <string name="grid_reorder_hint">← → ↑ ↓ Move    ·    OK Save    ·    Back Cancel</string>
 </resources>

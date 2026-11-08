@@ -52,11 +52,18 @@ final class TileAdapter extends RecyclerView.Adapter<TileAdapter.Holder> {
     @Override
     public void onBindViewHolder(@NonNull Holder h, int position) {
         AppEntry e = items.get(position);
+        h.card.setRotation(0f);
         h.art.setImageBitmap(e.art);
         h.name.setText(e.label);
         boolean on = position == focused;
         h.name.animate().cancel();
         h.name.setAlpha(on ? 1f : 0f);
+    }
+
+    @Override
+    public void onViewDetachedFromWindow(@NonNull Holder holder) {
+        holder.card.setRotation(0f);
+        super.onViewDetachedFromWindow(holder);
     }
 
     @Override
