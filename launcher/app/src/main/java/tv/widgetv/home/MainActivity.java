@@ -861,6 +861,15 @@ public class MainActivity extends Activity {
             hereWeather.setTranslationX(Math.max(0,dateRight-weatherRight));
         }
 
+        // Use spare space after HH:mm to separate seconds from weather without shrinking the clock.
+        float secondsShift = 0;
+        if (hereWeather.getVisibility() == View.VISIBLE && clock.getLayout() != null) {
+            float timeRight = clock.getLeft() + clock.getCompoundPaddingLeft() + clock.getLayout().getLineRight(0);
+            float spare = clockSeconds.getLeft() - timeRight - dp(3);
+            secondsShift = Math.max(0, Math.min(dp(4), spare));
+        }
+        clockSeconds.setTranslationX(-secondsShift);
+
         int tabsTop = header.getBottom() + dp(2);
         FrameLayout.LayoutParams nav = (FrameLayout.LayoutParams) screenTabs.getLayoutParams();
         if (header.getHeight() > 0 && nav.topMargin != tabsTop) {
