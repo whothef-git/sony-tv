@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -20,8 +21,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Current weather and today's high/low from Open-Meteo (free, no key, no account): the launcher's only
- * network use. One request covers the prayer city and, when the second clock is on, the second city.
+ * Current weather and today's high/low from Open-Meteo, with a local RainViewer rain check.
+ * One Open-Meteo request covers the prayer city and, when enabled, the second city.
  * MainActivity calls maybeFetch() only while it is resumed (onResume and the minute tick, whose receiver
  * is registered only while resumed), so nothing is fetched while another app is in front. No retries,
  * alarms or services: a failed fetch is tried again at a later stale check (at most every 10 minutes).
@@ -36,7 +37,7 @@ final class Weather {
     static final class City {
         final int temp, code;
         final int apparentTemp, humidity, windSpeed;
-        final boolean day;
+        final boolean day, radarRain;
         /** Today's high/low in that city's own local day. */
         final int max, min;
         final boolean hasRange;
@@ -47,7 +48,13 @@ final class Weather {
 
         City(int temp, int code, boolean day, int max, int min, boolean hasRange,
                 int apparentTemp, int humidity, int windSpeed) {
+            this(temp, code, day, max, min, hasRange, apparentTemp, humidity, windSpeed, false);
+        }
+
+        private City(int temp, int code, boolean day, int max, int min, boolean hasRange,
+                int apparentTemp, int humidity, int windSpeed, boolean radarRain) {
             this.temp = temp;
+            this.radarRain = radarRain;
             this.code = code;
             this.day = day;
             this.max = max;
@@ -91,6 +98,9 @@ final class Weather {
     /** 1 (prayer city) or 2 (plus the second clock's city). */
     private final int cities;
     private final String url;
+    private final String radarLatitude, radarLongitude;
+    private long radarRainAt, lastRadarAttempt = -RETRY_GAP_MS;
+    private boolean radarInFlight;
     private boolean inFlight;
     private long lastAttempt;
     private boolean failed;
@@ -100,8 +110,10 @@ final class Weather {
         Config cfg = Config.get(c);
         enabled = cfg.weatherEnabled;
         cities = cfg.secondEnabled ? 2 : 1;
-        String lats = coord(cfg.lat) + (cities == 2 ? "," + coord(cfg.secondLat) : "");
-        String lngs = coord(cfg.lng) + (cities == 2 ? "," + coord(cfg.secondLng) : "");
+        radarLatitude = coord(cfg.lat);
+        radarLongitude = coord(cfg.lng);
+        String lats = radarLatitude + (cities == 2 ? "," + coord(cfg.secondLat) : "");
+        String lngs = radarLongitude + (cities == 2 ? "," + coord(cfg.secondLng) : "");
         url = "https://api.open-meteo.com/v1/forecast?latitude=" + lats + "&longitude=" + lngs
                 + "&current=temperature_2m,weather_code,is_day,apparent_temperature,relative_humidity_2m,wind_speed_10m"
                 + "&hourly=temperature_2m,weather_code,precipitation_probability,precipitation,is_day,relative_humidity_2m,apparent_temperature,wind_speed_10m"
@@ -127,7 +139,16 @@ final class Weather {
                     prefs.getInt("x" + i, 0), prefs.getInt("n" + i, 0), prefs.contains("x" + i),
                     prefs.getInt("a" + i, -1), prefs.getInt("h" + i, -1), prefs.getInt("w" + i, -1));
         }
+        out[0] = applyRadarRain(out[0], radarRainAt, System.currentTimeMillis());
         return out;
+    }
+
+    static City applyRadarRain(City city, long frameTime, long now) {
+        boolean canSupplement = (city.code >= 0 && city.code <= 3) || city.code == 45
+                || city.code == 48 || city.code == 51 || city.code == 53 || city.code == 55;
+        if (!canSupplement || !LocalRainRadar.isFresh(frameTime, now)) return city;
+        return new City(city.temp, 61, city.day, city.max, city.min, city.hasRange,
+                city.apparentTemp, city.humidity, city.windSpeed, true);
     }
 
     boolean lastFetchFailed() { return failed; }
@@ -206,16 +227,33 @@ final class Weather {
         if (!enabled) return;
         long now = System.currentTimeMillis();
         boolean stale = !url.equals(prefs.getString("url", "")) || now - prefs.getLong("at", 0) >= STALE_MS;
-        if (inFlight || (!force && (!stale || now - lastAttempt < RETRY_GAP_MS))) return;
-        inFlight = true;
-        lastAttempt = now;
-        Log.i(TAG, "weather: fetch start" + (force ? " (forced)" : ""));
+        if (!inFlight && (force || (stale && now - lastAttempt >= RETRY_GAP_MS))) {
+            inFlight = true;
+            lastAttempt = now;
+            Log.i(TAG, "weather: fetch start" + (force ? " (forced)" : ""));
+            net.execute(() -> {
+                boolean ok = fetch();
+                main.post(() -> {
+                    inFlight = false;
+                    failed = !ok;
+                    onDone.run();
+                });
+            });
+        }
+
+        long elapsed = SystemClock.elapsedRealtime();
+        if (radarInFlight || elapsed - lastRadarAttempt < RETRY_GAP_MS) return;
+        radarInFlight = true;
+        lastRadarAttempt = elapsed;
         net.execute(() -> {
-            boolean ok = fetch();
+            long frame = LocalRainRadar.fetch(radarLatitude, radarLongitude);
+            Log.i(TAG, frame == 0 ? "weather radar: no fresh rain signal" : "weather radar: rain nearby");
             main.post(() -> {
-                inFlight = false;
-                failed = !ok;
-                onDone.run();
+                radarInFlight = false;
+                if (radarRainAt != frame) {
+                    radarRainAt = frame;
+                    onDone.run();
+                }
             });
         });
     }

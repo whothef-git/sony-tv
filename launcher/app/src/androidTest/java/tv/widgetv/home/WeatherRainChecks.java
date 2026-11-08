@@ -22,6 +22,24 @@ public final class WeatherRainChecks extends Instrumentation {
         int[] a=new int[960*540],b=new int[a.length];
         try{
             long now=java.time.ZonedDateTime.of(2026,10,31,17,15,0,0,JakimProvider.MALAYSIA).toInstant().toEpochMilli();
+            int[] radarPixels = new int[9];
+            Arrays.fill(radarPixels, 0xff004a70);
+            check(LocalRainRadar.hasRainNear(radarPixels), "radar echo covers the local sample");
+            Arrays.fill(radarPixels, 4, 9, 0);
+            check(!LocalRainRadar.hasRainNear(radarPixels), "isolated radar echoes do not trigger rain");
+            Arrays.fill(radarPixels, 0xff000000);
+            check(!LocalRainRadar.hasRainNear(radarPixels), "unknown radar colors do not trigger rain");
+            Weather.City cloudy = new Weather.City(25, 3, false, 31, 24, true);
+            Weather.City radarRain = Weather.applyRadarRain(cloudy, now - 5 * 60_000L, now);
+            check(radarRain.radarRain && radarRain.temp == 25 && WeatherAtmosphereView.rainCode(radarRain.code),
+                    "fresh radar rain supplements cloudy conditions and keeps the temperature");
+            check(Weather.applyRadarRain(cloudy, now - 16 * 60_000L, now) == cloudy, "stale radar falls back");
+            check(Weather.applyRadarRain(cloudy, 0, now) == cloudy, "unavailable radar falls back");
+            check(Weather.applyRadarRain(cloudy, now + 1000, now) == cloudy, "future radar is ignored");
+            Weather.City thunder = new Weather.City(25, 95, false, 31, 24, true);
+            check(Weather.applyRadarRain(thunder, now, now) == thunder, "radar preserves thunderstorms");
+            check(ForecastView.condition(51).equals("Drizzle") && ForecastView.condition(63).equals("Rain")
+                    && ForecastView.condition(80).equals("Rain showers"), "labels distinguish rain types");
             org.json.JSONObject fixture=forecastFixture(now);
             Weather.Forecast forecast=Weather.parseForecast(fixture,now,now);
             check(forecast.sunrise>0&&forecast.sunset>forecast.sunrise,"daily sunrise and sunset parsed");

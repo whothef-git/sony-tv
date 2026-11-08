@@ -73,6 +73,8 @@ Weather refreshes when the saved reading is at least ten minutes old, checked on
 
 Next Rain scans the next 24 hours for forecast precipitation with a rainy condition code. It shows **Now** for currently reported rain, an approximate hourly time otherwise, **None 24h** for a complete dry window, or a dash when data is unavailable. It is an estimate, not a minute-by-minute rain-onset alert. Sunrise and Sunset come from the same daily weather feed.
 
+Local rain detection checks [RainViewer](https://www.rainviewer.com/) automatically every 10 minutes while the launcher is active. A fresh positive echo near the configured city can supplement clear, cloudy, foggy or drizzle conditions. The Weather card shows “Rain detected nearby” when using that signal. Open-Meteo supplies the forecast and the fallback condition.
+
 Condition-driven weather atmosphere remains separate from the living-sky overlay. Falling rain, drifting clouds and bottom-edge splashes depend on current conditions, not forecast precipitation probability, and stop when their screen is inactive. Home has its own transparent rain layer with wet app tiles and tile-top impacts; Prayer Time and Smart Home remain clear. The app dock stays hidden on Weather to leave room for the five-day strip. Weather summaries for the local and secondary cities remain in the header. No Open-Meteo API key is required. See [rain behavior and TV checks](docs/weather-rain.md).
 
 ### Smart Home
