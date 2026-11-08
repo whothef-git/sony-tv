@@ -69,7 +69,7 @@ public final class ForecastView extends View {
         barGradW = -1; // force gradient rebuild on next draw
         setContentDescription(current == null || f == null
                 ? "Weather forecast unavailable or loading"
-                : "Shah Alam. " + current.temp + "°. " + ForecastView.condition(current.code));
+                : "Shah Alam. " + current.temp + "°. " + currentCondition(current));
         invalidate();
     }
 
@@ -152,7 +152,7 @@ public final class ForecastView extends View {
         bold(canvas, "SHAH ALAM", 20, 26, 11, MUTED, Paint.Align.LEFT);
         bold(canvas, current.temp + "°", 20, 72, 48, WHITE, Paint.Align.LEFT);
         icon(canvas, current.code, current.day, heroR - 90, 38, 46);
-        norm(canvas, condition(current.code), 20, 94, 13, MUTED_LT, Paint.Align.LEFT);
+        norm(canvas, currentCondition(current), 20, 94, 13, MUTED_LT, Paint.Align.LEFT);
         norm(canvas, "H: " + current.max + "°   L: " + current.min + "°",
                 20, 112, 11, MUTED, Paint.Align.LEFT);
 
@@ -171,7 +171,7 @@ public final class ForecastView extends View {
         float p3L = p2R + 7, p3R = heroR - 20;
         chip(canvas, p3L, cY1, p3R, cY2);
         bold(canvas, "NEXT RAIN", (p3L + p3R) / 2, cY1 + 13, 8.5f, 0xFF8EAAC5, Paint.Align.CENTER);
-        String nextRain = WeatherAtmosphereView.rainCode(current.code) ? "Now"
+        String nextRain = current.radarRain ? "Nearby" : WeatherAtmosphereView.rainCode(current.code) ? "Now"
                 : !forecast.rainTimingAvailable ? "—" : forecast.nextRain > 0 ? "~" + eventTime(forecast.nextRain) : "None 24h";
         bold(canvas, nextRain, (p3L + p3R) / 2, cY2 - 7, 10, WHITE, Paint.Align.CENTER);
 
@@ -277,7 +277,7 @@ public final class ForecastView extends View {
         String at = Instant.ofEpochMilli(forecast.updated)
                 .atZone(JakimProvider.MALAYSIA)
                 .format(DateTimeFormatter.ofPattern("HH:mm", Locale.UK));
-        norm(canvas, (failed ? "Saved forecast · " : "") + "Updated " + at + " · Open-Meteo",
+        norm(canvas, (failed ? "Saved forecast · " : "") + "Updated " + at + " · Open-Meteo" + (current.radarRain ? " · RainViewer radar" : ""),
                 w / 2, footerY, 10, MUTED, Paint.Align.CENTER);
 
         canvas.restore();
@@ -289,6 +289,10 @@ public final class ForecastView extends View {
                 android.text.format.DateFormat.is24HourFormat(getContext()) ? "HH:mm" : "h:mma", Locale.UK));
     }
 
+    private static String currentCondition(Weather.City city) {
+        return city.radarRain ? "Rain detected nearby" : condition(city.code);
+    }
+
     static String condition(int code) {
         if (code == 0) return "Clear";
         if (code == 1 || code == 2) return "Partly cloudy";
@@ -296,7 +300,13 @@ public final class ForecastView extends View {
         if (code == 45 || code == 48) return "Fog";
         if (code >= 95) return "Thunderstorms";
         if ((code >= 71 && code <= 77) || code == 85 || code == 86) return "Snow";
-        if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "Rain showers";
+        if (code == 51 || code == 53 || code == 55) return "Drizzle";
+        if (code == 56 || code == 57) return "Freezing drizzle";
+        if (code == 61) return "Light rain";
+        if (code == 63) return "Rain";
+        if (code == 65) return "Heavy rain";
+        if (code == 66 || code == 67) return "Freezing rain";
+        if (code >= 80 && code <= 82) return "Rain showers";
         return "Current conditions";
     }
 }
