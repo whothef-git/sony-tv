@@ -1,5 +1,6 @@
 package tv.widgetv.home;
 
+import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
@@ -45,6 +46,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.RequiresApi;
+import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -111,6 +113,14 @@ public class MainActivity extends Activity {
     private List<String> lastSignature;   // io thread only
     private List<String> dockPackages, hiddenPackages;
     private SharedPreferences prefs;
+    private View dockReorderHint, gridReorderHint;
+    private List<String> gridPackages;
+    private List<AppEntry> originalAppOrder;
+    private int originalAppIndex;
+    private ValueAnimator appWiggle;
+    private long appHoldTime = -1;
+    private long consumedAppHoldTime = -1;
+    private final Runnable appHold = this::beginAppReorder;
     private Weather weather;
     private PrayerDay day;
     /** Debug builds only: a fixed "now" for the timeline and sky (adb fake_time), or -1. */
@@ -181,7 +191,11 @@ public class MainActivity extends Activity {
         smartHome.setFocusCardsCallback(() -> focus(Zone.SMART, 0, false));
         pills = new ImageView[]{findViewById(R.id.btn_inputs), findViewById(R.id.btn_wifi),
                 findViewById(R.id.btn_settings)};
-        dockPackages = Arrays.asList(getResources().getStringArray(R.array.dock_packages));
+        prefs = getSharedPreferences("focus", MODE_PRIVATE);
+        dockPackages = readDockOrder();
+        gridPackages = readAppOrder("grid_order");
+        gridReorderHint = findViewById(R.id.grid_reorder_hint);
+        dockReorderHint = findViewById(R.id.dock_reorder_hint);
         hiddenPackages = Arrays.asList(getResources().getStringArray(R.array.hidden_packages));
         weather = new Weather(this);
         applyClockFont();
@@ -202,7 +216,6 @@ public class MainActivity extends Activity {
         setUpList(gridList = findViewById(R.id.grid), gridAdapter);
         homeRain.setHomeDock(dockList);
 
-        prefs = getSharedPreferences("focus", MODE_PRIVATE);
         try {
             zone = Zone.valueOf(prefs.getString("zone", Zone.DOCK.name()));
         } catch (IllegalArgumentException old) {
@@ -264,6 +277,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        cancelAppHold();
+        finishAppReorder(false);
         resumed = false;
         main.removeCallbacks(secondTick);
         ((RollingTimeView)clock).setMotionEnabled(false);
@@ -289,6 +304,8 @@ public class MainActivity extends Activity {
         boolean atHome = resumed || hasWindowFocus();
         if (BuildConfig.DEBUG) Log.d(TAG, "onNewIntent: resumed=" + resumed + " windowFocus=" + hasWindowFocus());
         if (atHome) {
+            cancelAppHold();
+            finishAppReorder(false);
             pendingPkg = null; // a still-loading app list must not restore the old focus over this
             if (dockAdapter.getItemCount() == 0 && zone != Zone.MENU) {
                 zone = Zone.DOCK;
@@ -383,6 +400,7 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- apps
 
     private void loadApps(boolean force) {
+        List<String> requestedDockOrder = dockPackages;
         io.execute(() -> {
             Map<String, AppLoader.Candidate> found = loader.query();
             List<String> sig = new ArrayList<>();
@@ -391,7 +409,7 @@ public class MainActivity extends Activity {
             lastSignature = sig;
 
             List<AppEntry> dock = new ArrayList<>();
-            for (String pkg : dockPackages) {
+            for (String pkg : requestedDockOrder) {
                 AppLoader.Candidate c = found.remove(pkg);
                 if (c != null) dock.add(loader.entry(c));
             }
@@ -404,6 +422,14 @@ public class MainActivity extends Activity {
     }
 
     private void applyApps(List<AppEntry> dock, List<AppEntry> grid) {
+        cancelAppHold();
+        finishAppReorder(false);
+        // A package scan may have started before the user saved a new order.
+        dock.sort(java.util.Comparator.comparingInt(app -> dockPackages.indexOf(app.pkg())));
+        grid.sort(java.util.Comparator.comparingInt(app -> {
+            int rank = gridPackages.indexOf(app.pkg());
+            return rank >= 0 ? rank : gridPackages.size();
+        }));
         String keep = pendingPkg != null ? pendingPkg : focusedPkg();
         pendingPkg = null;
         dockAdapter.setItems(dock);
@@ -446,6 +472,138 @@ public class MainActivity extends Activity {
         }
     };
 
+    private List<String> readAppOrder(String preference) {
+        String saved = prefs.getString(preference, "");
+        return saved.isEmpty() ? new ArrayList<>() : new ArrayList<>(Arrays.asList(saved.split(",")));
+    }
+
+    private List<String> readDockOrder() {
+        List<String> remaining = new ArrayList<>(Arrays.asList(
+                getResources().getStringArray(R.array.dock_packages)));
+        List<String> order = new ArrayList<>();
+        for (String pkg : readAppOrder("dock_order")) {
+            if (remaining.remove(pkg)) order.add(pkg);
+        }
+        order.addAll(remaining);
+        return order;
+    }
+
+    private void cancelAppHold() {
+        if (appHoldTime == -1) return;
+        main.removeCallbacks(appHold);
+        consumedAppHoldTime = appHoldTime;
+        appHoldTime = -1;
+    }
+
+    private boolean canReorderApps() {
+        return tabIdx == 0 && ((zone == Zone.DOCK && dockAdapter.getItemCount() >= 2)
+                || (zone == Zone.GRID && gridAdapter.getItemCount() >= 2));
+    }
+
+    private void beginAppReorder() {
+        if (appHoldTime == -1 || !resumed || !canReorderApps()) return;
+        cancelAppHold();
+        boolean dock = zone == Zone.DOCK;
+        TileAdapter adapter = dock ? dockAdapter : gridAdapter;
+        RecyclerView list = dock ? dockList : gridList;
+        originalAppOrder = new ArrayList<>(adapter.items);
+        originalAppIndex = dock ? dockIdx : gridIdx;
+        DefaultItemAnimator moves = new DefaultItemAnimator();
+        moves.setMoveDuration(180);
+        list.setItemAnimator(moves);
+        (dock ? dockReorderHint : gridReorderHint).setVisibility(View.VISIBLE);
+
+        appWiggle = ValueAnimator.ofFloat(0f, 1f);
+        appWiggle.setDuration(360);
+        appWiggle.setRepeatCount(ValueAnimator.INFINITE);
+        appWiggle.setInterpolator(new android.view.animation.LinearInterpolator());
+        appWiggle.addUpdateListener(animation -> {
+            float angle = 1.7f * (float) Math.sin(2 * Math.PI * animation.getAnimatedFraction());
+            for (int i = 0; i < list.getChildCount(); i++) {
+                View tile = list.getChildAt(i);
+                tile.findViewById(R.id.card).setRotation(i % 2 == 0 ? angle : -angle);
+            }
+        });
+        appWiggle.start();
+    }
+
+    private void moveApp(int keyCode) {
+        boolean dock = zone == Zone.DOCK;
+        TileAdapter adapter = dock ? dockAdapter : gridAdapter;
+        int from = dock ? dockIdx : gridIdx;
+        int count = adapter.getItemCount();
+        int destination;
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                if (!dock && from % COLS == 0) return;
+                destination = from - 1;
+                break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                if (!dock && from % COLS == COLS - 1) return;
+                destination = from + 1;
+                break;
+            case KeyEvent.KEYCODE_DPAD_UP:
+                if (dock) return;
+                destination = from - COLS;
+                break;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                if (dock || (from / COLS + 1) * COLS >= count) return;
+                destination = Math.min(from + COLS, count - 1);
+                break;
+            default:
+                return;
+        }
+        if (destination < 0 || destination >= count) return;
+        adapter.items.add(destination, adapter.items.remove(from));
+        if (dock) dockIdx = destination;
+        else {
+            gridIdx = destination;
+            needScroll = true;
+        }
+        adapter.focused = destination;
+        adapter.notifyItemMoved(from, destination);
+    }
+
+    private void finishAppReorder(boolean save) {
+        if (originalAppOrder == null) return;
+        boolean dock = zone == Zone.DOCK;
+        TileAdapter adapter = dock ? dockAdapter : gridAdapter;
+        RecyclerView list = dock ? dockList : gridList;
+        appWiggle.cancel();
+        appWiggle = null;
+        list.setItemAnimator(null);
+        for (int i = 0; i < list.getChildCount(); i++) {
+            list.getChildAt(i).findViewById(R.id.card).setRotation(0f);
+        }
+        (dock ? dockReorderHint : gridReorderHint).setVisibility(View.GONE);
+        if (save) {
+            List<String> order = new ArrayList<>(dock ? dockPackages : gridPackages);
+            for (AppEntry app : originalAppOrder) {
+                if (!order.contains(app.pkg())) order.add(app.pkg());
+            }
+            int next = 0;
+            // Preserve slots for apps that are temporarily absent.
+            for (int i = 0; i < order.size(); i++) {
+                if (indexOf(originalAppOrder, order.get(i)) >= 0) {
+                    order.set(i, adapter.items.get(next++).pkg());
+                }
+            }
+            if (dock) dockPackages = order;
+            else gridPackages = order;
+            prefs.edit().putString(dock ? "dock_order" : "grid_order", String.join(",", order)).apply();
+        } else {
+            if (dock) dockIdx = originalAppIndex;
+            else {
+                gridIdx = originalAppIndex;
+                needScroll = true;
+            }
+            adapter.focused = originalAppIndex;
+            adapter.setItems(originalAppOrder);
+        }
+        originalAppOrder = null;
+        updateGlass(false);
+    }
+
     // ---------------------------------------------------------------- D-pad
 
     @Override
@@ -461,17 +619,44 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_LEFT:
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if (down) move(code);
+                if (down) {
+                    cancelAppHold();
+                    if (originalAppOrder == null) move(code);
+                    else moveApp(code);
+                }
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                if (!down && !ev.isCanceled()) {
-                    if (tabIdx == 3 && zone == Zone.TABS && ev.getEventTime() - ev.getDownTime() >= 600) smartHome.openManagement();
+                if (down) {
+                    if (ev.getRepeatCount() == 0 && originalAppOrder == null && canReorderApps()) {
+                        appHoldTime = ev.getDownTime();
+                        main.postDelayed(appHold, android.view.ViewConfiguration.getLongPressTimeout());
+                    } else if (ev.isLongPress() && appHoldTime == ev.getDownTime()) {
+                        beginAppReorder();
+                    }
+                    return true;
+                }
+                if (appHoldTime == ev.getDownTime()) {
+                    main.removeCallbacks(appHold);
+                    appHoldTime = -1;
+                }
+                if (consumedAppHoldTime == ev.getDownTime()) {
+                    consumedAppHoldTime = -1;
+                    return true;
+                }
+                if (!ev.isCanceled()) {
+                    if (originalAppOrder != null) finishAppReorder(true);
+                    else if (tabIdx == 3 && zone == Zone.TABS && ev.getEventTime() - ev.getDownTime() >= 600) smartHome.openManagement();
                     else select();
                 }
                 return true;
             case KeyEvent.KEYCODE_BACK:
+                cancelAppHold();
+                if (originalAppOrder != null) {
+                    if (!down) finishAppReorder(false);
+                    return true;
+                }
                 // Back closes Inputs first; otherwise it returns to the Home screen.
                 if (!down && zone == Zone.MENU) { closeMenu(); return true; }
                 if (!down && zone == Zone.HADITH) { focus(Zone.TABS, 1, true); return true; }
